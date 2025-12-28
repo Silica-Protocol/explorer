@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # NPM dependencies (Angular)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "angular"
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+          - "zone.js"
+          - "rxjs"
+      typescript:
+        patterns:
+          - "typescript"
+          - "@types/*"
+      testing:
+        patterns:
+          - "karma*"
+          - "jasmine*"
+          - "@types/jasmine"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
