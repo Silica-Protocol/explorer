@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Chert DAG Explorer - Canvas Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{ --bg:#0a0a0a; --text:#e6eef0 }
+        html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Arial}
+        .app{display:flex;height:100vh}
+        .panel{width:320px;padding:16px;box-sizing:border-box;background:linear-gradient(180deg,#070707,#0f0f0f);border-right:1px solid #111}
+        .main{flex:1;position:relative}
+        canvas{display:block;width:100%;height:100%}
+        #tooltip{position:absolute;pointer-events:none;background:#0b0b0b;border:1px solid #222;padding:8px;border-radius:6px;color:#ddd;font-size:12px;opacity:0;transition:opacity 120ms}
+        #detail-panel{position:absolute;right:16px;bottom:16px;width:280px;background:rgba(6,6,6,0.92);border:1px solid #222;padding:10px;color:#ddd;display:none}
+        .stat{font-family:'JetBrains Mono',monospace}
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="panel">
+            <h2 class="text-lg font-semibold">Chert DAG Explorer (Canvas)</h2>
+            <p class="text-sm text-gray-400">High performance canvas renderer + pluggable data service</p>
+            <hr class="my-3 border-gray-800">
+            <div class="space-y-2">
+                <div>Blocks: <span id="block-count" class="stat">0</span></div>
+                <div>Finalized: <span id="finalized-count" class="stat">0</span></div>
+                <div>Transactions: <span id="total-transactions" class="stat">0</span></div>
+                <div>TPS: <span id="transactions-per-second" class="stat">0</span></div>
+            </div>
+            <div class="mt-3">
+                <!-- layout fixed by code -->
+            </div>
+            <hr class="my-3 border-gray-800">
+            <div class="flex flex-col">
+                <div class="flex gap-2 mt-2">
+                    <button id="start-btn" class="px-3 flex-1 py-2 bg-green-600 rounded">Start</button>
+                    <button id="pause-btn" class="px-3 flex-1 py-2 bg-gray-700 rounded">Pause</button>
+                </div>
+                <div class="flex gap-2 mt-2">
+                    <input id="speed-slider" type="range" min="0.25" max="3" step="0.25" value="1" class="grow" style="width:180px;margin-right:8px">
+                    <div id="speed-value" class="w-12 flex-none text-xs">1x</div>
+                </div>
+            </div>
+            <hr class="my-3 border-gray-800">
+            <div class="text-xs text-gray-400">Clock: <span id="time-elapsed">00:00:00</span></div>
+            <div class="text-xs text-gray-400">Avg Reputation: <span id="avg-rep">0%</span></div>
+            <div class="text-xs text-gray-400">Next Election In: <span id="election-countdown">--:--</span></div>
+            <div class="text-xs text-gray-400">Blocks total: <span id="total-blocks">0</span></div>
+        </div>
+        <div class="main">
+            <canvas id="simulation-canvas"></canvas>
+            <div id="tooltip"></div>
+            <div id="detail-panel"><div id="detail-title" style="font-weight:600;margin-bottom:6px;font-family: 'JetBrains Mono', monospace;">Block</div><div id="detail-body" style="font-size:13px;line-height:1.3;">Hover a node</div></div>
+        </div>
+    </div>
+
+    <script src="static/mockDataService.js"></script>
+    <script src="static/canvasRenderer.js"></script>
+
+    <!-- Committee and momentum UI placeholders -->
+    <style>#committee { margin-top:10px; font-size:13px; } #momentum-strip { margin-top:8px; display:flex; gap:6px; align-items:center; }</style>
+
+    <script>
+    // Lightweight UI updater that uses the shared window.DEMO_DS when available
+    (function(){
+        const infoBox = {
+            blockCount: document.getElementById('block-count'),
+            finalizedCount: document.getElementById('finalized-count'),
+            totalTransactionsDisplay: document.getElementById('total-transactions')
+        };
+        const clockDisplay = { timeElapsed: document.getElementById('time-elapsed'), totalBlocks: document.getElementById('total-blocks') };
+        const tooltip = document.getElementById('tooltip');
+
+        // add committee and momentum UI into side panel
+        const panel = document.querySelector('.panel');
+    const committeeEl = document.createElement('div'); committeeEl.id = 'committee'; committeeEl.innerHTML = '<strong>Committee:</strong> <span id="committee-list">—</span>';
+        const momentumEl = document.createElement('div'); momentumEl.id = 'momentum-strip'; momentumEl.innerHTML = '<strong style="margin-right:8px">Momentum:</strong><div id="momentum-dots" style="display:flex;gap:4px"></div>';
+        panel.appendChild(committeeEl); panel.appendChild(momentumEl);
+
+    const committeeList = document.getElementById('committee-list');
+        const momentumDots = document.getElementById('momentum-dots');
+
+        let momentum = [];
+
+        function renderMomentum(events){
+            events.forEach(ev => momentum.push(ev));
+            while(momentum.length > 12) momentum.shift();
+            // render small colored dots
+            momentumDots.innerHTML = '';
+            momentum.slice().reverse().forEach(ev => {
+                const d = document.createElement('div'); d.style.width='10px'; d.style.height='10px'; d.style.borderRadius='50%'; d.title = ev.type;
+                if (ev.type === 'vdf') d.style.background = '#6ee7b7';
+                else if (ev.type === 'finality') d.style.background = '#60a5fa';
+                else if (ev.type === 'election') d.style.background = '#fbbf24';
+                else d.style.background = '#888';
+                momentumDots.appendChild(d);
+            });
+            // transient tooltip flash
+            tooltip.innerHTML = `<div style="font-size:11px">${momentum.map(m=>m.type[0].toUpperCase()).join(' ')}</div>`; tooltip.style.opacity = 0.9; setTimeout(()=>tooltip.style.opacity=0, 900);
+        }
+
+        // wait for shared data service to be created by the renderer bootstrap
+        const waitForDS = setInterval(()=>{
+            const ds = window.DEMO_DS;
+            if (!ds) return;
+            clearInterval(waitForDS);
+
+            // wire controls using the shared DS
+            const startBtn = document.getElementById('start-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const speedSlider = document.getElementById('speed-slider');
+            const speedValue = document.getElementById('speed-value');
+            const avgRepEl = document.getElementById('avg-rep');
+            const electionCountdownEl = document.getElementById('election-countdown');
+
+            let running = false;
+            startBtn.addEventListener('click', ()=>{ if (running) return; running=true; ds.start(); if (window.DEMO_RENDERER) window.DEMO_RENDERER.start(); startBtn.disabled=true; startBtn.textContent='Running...'; });
+            pauseBtn.addEventListener('click', ()=>{ if (!running) return; running=false; ds.stop(); if (window.DEMO_RENDERER) window.DEMO_RENDERER.stop(); pauseBtn.textContent='Paused'; startBtn.disabled=false; startBtn.textContent='Start'; });
+            speedSlider.addEventListener('input', e=>{ speedValue.textContent = e.target.value + 'x'; ds.opts.interval = 140 / parseFloat(e.target.value); if (window.DEMO_RENDERER && typeof window.DEMO_RENDERER.setTempo === 'function') window.DEMO_RENDERER.setTempo(parseFloat(e.target.value)); });
+
+            // simulation clock scaling: map real elapsed to sim elapsed using baseline interval 140ms
+            let lastRealNow = Date.now(); let simElapsedMs = 0;
+            function updateClock() {
+                const now = Date.now(); const delta = now - lastRealNow; lastRealNow = now;
+                const simScale = 140 / (ds.opts && ds.opts.interval ? ds.opts.interval : 140);
+                simElapsedMs += delta * simScale;
+                const hours = Math.floor(simElapsedMs / 3600000) % 100;
+                const mins = Math.floor(simElapsedMs / 60000) % 60;
+                const secs = Math.floor(simElapsedMs / 1000) % 60;
+                document.getElementById('time-elapsed').textContent = `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+                requestAnimationFrame(updateClock);
+            }
+            updateClock();
+
+            ds.onUpdate(snapshot => {
+                const blocks = snapshot.blocks || [];
+                infoBox.blockCount.textContent = blocks.length;
+                clockDisplay.totalBlocks.textContent = blocks.length;
+                const totalTx = blocks.reduce((s,b)=>s+(b.transactionCount||0),0);
+                infoBox.totalTransactionsDisplay.textContent = totalTx.toLocaleString();
+
+                    // average reputation
+                    const avgRep = blocks.length ? (blocks.reduce((s,b)=>s+(b.reputation||0),0)/blocks.length) : 0;
+                    avgRepEl.textContent = Math.round(avgRep*100) + '%';
+
+                    // election countdown (use nextElectionTime if present)
+                    if (snapshot.nextElectionTime) {
+                        const remainMs = Math.max(0, snapshot.nextElectionTime - Date.now());
+                        const sec = Math.floor(remainMs/1000)%60; const min = Math.floor(remainMs/60000);
+                        electionCountdownEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+                    }
+
+                if (snapshot.events && snapshot.events.length) {
+                    renderMomentum(snapshot.events);
+                    // process election event to show committee
+                    snapshot.events.forEach(ev => {
+                        if (ev.type === 'election' && ev.committee) {
+                            committeeList.textContent = ev.committee.slice(0,8).join(', ');
+                            // subtle highlight on renderer if available
+                            if (window.DEMO_RENDERER && typeof window.DEMO_RENDERER.highlightCommittee === 'function') {
+                                window.DEMO_RENDERER.highlightCommittee(ev.committee);
+                            }
+                        }
+                    });
+                }
+            });
+
+            // ensure hover works even when paused: map canvas mouse to renderer pickAt
+            const canvas = document.getElementById('simulation-canvas');
+            canvas.addEventListener('mousemove', e=>{
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+                if (window.DEMO_RENDERER && typeof window.DEMO_RENDERER.pickAt === 'function'){
+                    const node = window.DEMO_RENDERER.pickAt(x,y);
+                    if (typeof window.DEMO_RENDERER._hoverCb === 'function') window.DEMO_RENDERER._hoverCb(node);
+                }
+            });
+        }, 100);
+    })();
+    </script>
+
+<!-- Canvas bootstrap: create single DS and CanvasRenderer -->
+<script>
+(()=>{
+    const canvas = document.getElementById('simulation-canvas');
+    function resizeCanvas(){ const dpr = window.devicePixelRatio || 1; canvas.width = Math.floor(canvas.clientWidth * dpr); canvas.height = Math.floor(canvas.clientHeight * dpr); const ctx = canvas.getContext('2d'); if (ctx) ctx.setTransform(dpr,0,0,dpr,0,0); }
+    resizeCanvas(); window.addEventListener('resize', resizeCanvas);
+
+    function init(){
+        if (window.DEMO_DS) return; // already inited
+        const ds = new MockDataService({ interval: 140 });
+        const renderer = new CanvasRenderer(canvas, ds, { nodeRadius:6 });
+        window.DEMO_DS = ds; window.DEMO_RENDERER = renderer;
+
+        if (!renderer.highlightCommittee) renderer.highlightCommittee = function(committeeIds){};
+
+        renderer.onNodeHover(node=>{
+            const tooltip = document.getElementById('tooltip'); const detailPanel = document.getElementById('detail-panel'); const detailTitle = document.getElementById('detail-title'); const detailBody = document.getElementById('detail-body');
+            if (!node) { tooltip.style.opacity = 0; detailPanel.style.display='none'; return; }
+            tooltip.style.opacity = 1; tooltip.innerHTML = `<div><strong>Block ${node.id}</strong></div><div>tx: ${node.transactionCount}</div><div>rep: ${(node.reputation*100).toFixed(0)}%</div>`;
+            detailPanel.style.display = 'block'; detailTitle.textContent = `Block ${node.id}`; detailBody.innerHTML = `<div>Algorithm: ${node.miningAlgorithm||'-'}</div><div>Team: ${node.validationTeam||'-'}</div><div>Transactions: ${node.transactionCount}</div><div>Reputation: ${(node.reputation*100).toFixed(0)}%</div>`;
+        });
+    }
+
+    const wait = setInterval(()=>{ if (window.MockDataService && window.CanvasRenderer) { clearInterval(wait); init(); } }, 50);
+})();
+</script>
+        
+</body>
+</html>
+
