@@ -12,6 +12,6 @@
   "include": [
     "src/**/*.spec.ts",
     "src/**/*.d.ts",
-    "../packages/chert-ts-models/src/**/*.ts"
+    "../protocol-core/ts-models/src/**/*.ts"
   ]
 }

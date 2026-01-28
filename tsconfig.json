@@ -23,8 +23,6 @@
     ],
     "baseUrl": "src",
     "paths": {
-      "@chert/ts-models": ["../packages/chert-ts-models/src/index.ts"],
-      "@chert/ts-models/*": ["../packages/chert-ts-models/src/*.ts"],
       "@app/*": ["app/*"],
       "@services/*": ["app/services/*"],
       "@shared/*": ["app/shared/*"],

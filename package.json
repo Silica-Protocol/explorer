@@ -13,7 +13,8 @@
   },
   "private": true,
   "dependencies": {
-    "@chert/ts-models": "file:../packages/chert-ts-models",
+    "@silica-protocol/explorer-models": "^0.1.0",
+    "@silica-protocol/node-models": "^0.1.0",
     "@angular/animations": "^20.3.1",
     "@angular/cdk": "^20.2.14",
     "@angular/common": "^20.3.1",

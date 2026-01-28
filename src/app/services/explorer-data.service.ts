@@ -1,9 +1,22 @@
 import { Inject, Injectable, NgZone, OnDestroy } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, Subject, Subscription, interval } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { EXPLORER_DATA_CONFIG, ExplorerDataConfig } from '@app/services/explorer-data.config';
+import { EXPLORER_BACKEND_CONFIG, ExplorerBackendConfig } from '@services/explorer-backend.config';
 import { DeterministicRandom } from '@shared/util/deterministic-rng';
 import { assert } from '@shared/util/assert';
+import type {
+  GetBlocksResult as NodeGetBlocksResult,
+  Block as NodeBlock,
+  Address as NodeAddress,
+  GetTransactionResult as NodeGetTransactionResult,
+  TransactionHistoryResult as NodeTransactionHistoryResult,
+  Transaction as NodeTransaction,
+  JsonRpcRequest,
+  JsonRpcResponse
+} from '@silica-protocol/node-models';
 import type {
   AccountActivitySnapshot,
   AccountAddress,
@@ -18,7 +31,7 @@ import type {
   PositiveInteger,
   UnixMs,
   CommitteeId
-} from '@chert/ts-models';
+} from '@silica-protocol/explorer-models';
 
 interface MutableAccountState {
   readonly address: AccountAddress;
@@ -46,6 +59,8 @@ export class ExplorerDataService implements OnDestroy {
   private readonly transactionsSubject = new BehaviorSubject<readonly TransactionSummary[]>([]);
   private readonly networkSubject = new BehaviorSubject<NetworkStatistics>(this.emptyNetworkStats());
   private readonly accountsSubject = new BehaviorSubject<readonly AccountSummary[]>([]);
+  private readonly lastRefreshedAtSubject = new BehaviorSubject<number | null>(null);
+  private readonly refreshInFlightSubject = new BehaviorSubject<boolean>(false);
 
   private readonly accounts = new Map<AccountAddress, MutableAccountState>();
   private readonly blockDetails = new Map<Hash, BlockDetails>();
@@ -62,9 +77,14 @@ export class ExplorerDataService implements OnDestroy {
   private running = false;
   private tickSub: Subscription | null = null;
 
+  private nodePollInFlight = false;
+  private nodeLatestHeight = 0;
+
   constructor(
     @Inject(EXPLORER_DATA_CONFIG) private readonly config: ExplorerDataConfig,
-    private readonly zone: NgZone
+    @Inject(EXPLORER_BACKEND_CONFIG) private readonly backend: ExplorerBackendConfig,
+    private readonly zone: NgZone,
+    private readonly http: HttpClient
   ) {
     assert(config.maxBlocks > 0, 'maxBlocks must be positive');
     assert(config.initialBlockCount > 0, 'initialBlockCount must be positive');
@@ -72,15 +92,24 @@ export class ExplorerDataService implements OnDestroy {
     assert(config.txPerBlockMax >= config.txPerBlockMin, 'txPerBlockMax must be >= min');
 
     this.rng = new DeterministicRandom(config.seed);
-    this.accountPool = this.createAccountPool(config.accountCount);
-    this.committeePool = this.createCommitteePool(Math.max(COMMITTEE_SIZE * 4, COMMITTEE_SIZE));
-    this.currentCommittee = this.committeePool.slice(0, COMMITTEE_SIZE);
-    this.nextElectionTimestamp = Date.now() + config.blockIntervalMs * 32;
+    if (this.backend.mode === 'mock') {
+      this.accountPool = this.createAccountPool(config.accountCount);
+      this.committeePool = this.createCommitteePool(Math.max(COMMITTEE_SIZE * 4, COMMITTEE_SIZE));
+      this.currentCommittee = this.committeePool.slice(0, COMMITTEE_SIZE);
+      this.nextElectionTimestamp = Date.now() + config.blockIntervalMs * 32;
 
-    this.accountPool.forEach((address) => {
-      this.ensureAccount(address);
-    });
-    this.publishAccountSnapshots();
+      this.accountPool.forEach((address) => {
+        this.ensureAccount(address);
+      });
+      this.publishAccountSnapshots();
+    } else {
+      // Node backend starts empty and is populated from live chain data.
+      this.accountPool = [];
+      this.committeePool = [];
+      this.currentCommittee = [];
+      this.nextElectionTimestamp = Date.now();
+      this.publishAccountSnapshots();
+    }
 
     if (config.autoStart) {
       this.start();
@@ -103,8 +132,81 @@ export class ExplorerDataService implements OnDestroy {
     return this.accountsSubject.asObservable();
   }
 
+  /** Last successful refresh timestamp (ms since epoch), or null if not yet refreshed. */
+  get lastRefreshedAt$(): Observable<number | null> {
+    return this.lastRefreshedAtSubject.asObservable();
+  }
+
+  /** True while a refresh is in-flight (node mode only). */
+  get refreshInFlight$(): Observable<boolean> {
+    return this.refreshInFlightSubject.asObservable();
+  }
+
+  /** Manual refresh action for the UI. */
+  refreshNow(): void {
+    if (this.backend.mode === 'node') {
+      void this.refreshFromNode();
+      return;
+    }
+
+    // In mock mode, "refresh" means advancing the simulated chain by one block.
+    if (!this.initialized) {
+      this.seedInitialState();
+      this.initialized = true;
+    }
+    this.generateNextBlock(Date.now());
+    this.lastRefreshedAtSubject.next(Date.now());
+  }
+
+  async fetchTransactionByHash(txId: string): Promise<NodeGetTransactionResult> {
+    const trimmed = txId.trim();
+    assert(trimmed.length > 0, 'Transaction hash must not be empty');
+    return await this.jsonRpcCall<NodeGetTransactionResult>('get_transaction', { tx_id: trimmed });
+  }
+
+  async fetchTransactionHistory(
+    address: string,
+    limit: number = 50,
+    cursor: string | null = null
+  ): Promise<NodeTransactionHistoryResult> {
+    const trimmed = address.trim();
+    assert(trimmed.length > 0, 'Address must not be empty');
+    assert(Number.isFinite(limit) && limit > 0, 'History limit must be positive');
+    const params: Record<string, unknown> = { address: trimmed, limit };
+    if (cursor) {
+      params['cursor'] = cursor;
+    }
+    return await this.jsonRpcCall<NodeTransactionHistoryResult>('get_transaction_history', params);
+  }
+
+  async fetchBalance(address: string): Promise<{ address: string; balance: string; nonce: number }> {
+    const trimmed = address.trim();
+    assert(trimmed.length > 0, 'Address must not be empty');
+    const result = await this.jsonRpcCall<{ address: string; balance: string; nonce: number }>(
+      'get_balance',
+      { address: trimmed }
+    );
+    assert(typeof result.balance === 'string', 'Balance must be a string');
+    assert(Number.isFinite(result.nonce), 'Nonce must be a number');
+    return result;
+  }
+
   start(): void {
     if (this.running) {
+      return;
+    }
+
+    if (this.backend.mode === 'node') {
+      this.running = true;
+
+      // Poll immediately, then on an interval.
+      void this.refreshFromNode();
+
+      this.zone.runOutsideAngular(() => {
+        this.tickSub = interval(this.config.blockIntervalMs)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe(() => void this.refreshFromNode());
+      });
       return;
     }
 
@@ -141,6 +243,8 @@ export class ExplorerDataService implements OnDestroy {
     this.transactionsSubject.complete();
     this.networkSubject.complete();
     this.accountsSubject.complete();
+    this.lastRefreshedAtSubject.complete();
+    this.refreshInFlightSubject.complete();
   }
 
   getBlockDetails(hash: Hash): BlockDetails | undefined {
@@ -420,12 +524,27 @@ export class ExplorerDataService implements OnDestroy {
     return next;
   }
 
+  private pushUniqueTx(list: TransactionSummary[], tx: TransactionSummary): TransactionSummary[] {
+    const next = [tx, ...list.filter((value) => value.hash !== tx.hash)];
+    if (next.length > RECENT_ACCOUNT_ACTIVITY_LIMIT) {
+      next.length = RECENT_ACCOUNT_ACTIVITY_LIMIT;
+    }
+    return next;
+  }
+
   private publishAccountSnapshots(): void {
     const summaries = Array.from(this.accounts.values()).map((state) => this.toAccountSummary(state));
     this.accountsSubject.next(summaries);
   }
 
   private determineStatus(_: PositiveInteger): BlockSummary['status'] {
+    // In mock mode we treat everything as pending.
+    if (this.backend.mode === 'mock') {
+      return 'pending';
+    }
+
+    // For node-backed data, we approximate finality using a configurable finality lag.
+    // NOTE: This is a UI-level heuristic until the node exposes explicit finality.
     return 'pending';
   }
 
@@ -501,13 +620,31 @@ export class ExplorerDataService implements OnDestroy {
   private ensureAccount(address: AccountAddress): MutableAccountState {
     let state = this.accounts.get(address);
     if (!state) {
+      const now = Date.now();
+
+      if (this.backend.mode === 'node') {
+        state = {
+          address,
+          balance: 0,
+          stakedBalance: 0,
+          nonce: 0,
+          reputation: 0,
+          lastSeen: now,
+          outbound: [],
+          inbound: [],
+          recentBlocks: []
+        };
+        this.accounts.set(address, state);
+        return state;
+      }
+
       state = {
         address,
         balance: this.rng.nextInt(50_000_000, 200_000_000),
         stakedBalance: this.rng.nextInt(5_000_000, 50_000_000),
         nonce: 0,
         reputation: Number((0.4 + this.rng.next() * 0.6).toFixed(2)),
-        lastSeen: Date.now(),
+        lastSeen: now,
         outbound: [],
         inbound: [],
         recentBlocks: []
@@ -515,6 +652,226 @@ export class ExplorerDataService implements OnDestroy {
       this.accounts.set(address, state);
     }
     return state;
+  }
+
+  private nodeEndpoint(path: string): string {
+    const base = (this.backend.nodeBaseUrl || 'https://rpc.testnet.silicaprotocol.network').trim();
+    assert(base.length > 0, 'nodeBaseUrl must not be empty');
+    const url = new URL(base.endsWith('/') ? base : `${base}/`);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+    return url.toString();
+  }
+
+  private async jsonRpcCall<TResult>(method: string, params?: unknown): Promise<TResult> {
+    assert(method.length > 0, 'JSON-RPC method must not be empty');
+    const request: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      method,
+      params,
+      id: 1
+    };
+    const response = await firstValueFrom(
+      this.http.post<JsonRpcResponse<TResult>>(this.nodeEndpoint('jsonrpc'), request)
+    );
+
+    if (response.error) {
+      throw new Error(`JSON-RPC error ${response.error.code}: ${response.error.message}`);
+    }
+    if (response.result === undefined) {
+      throw new Error('JSON-RPC response missing result');
+    }
+    return response.result;
+  }
+
+  private toUnixMsFromRfc3339(timestamp: string): UnixMs {
+    const ms = Date.parse(timestamp);
+    assert(Number.isFinite(ms), 'Invalid RFC3339 timestamp');
+    return this.toUnixMs(ms);
+  }
+
+  private nodeAddressToAccountAddress(address: NodeAddress, label: string): AccountAddress {
+    // Node-models uses Address branding, explorer-models uses AccountAddress branding.
+    // Both are backed by strings but intentionally incompatible at the type level.
+    const raw = address as unknown as string;
+    assert(typeof raw === 'string', `${label} must be a string`);
+    assert(raw.trim().length > 0, `${label} must not be empty`);
+
+    // Current testnet uses hex 0x-addresses; keep validation permissive but helpful.
+    // If we ever support other address formats, relax/extend this.
+    assert(/^0x[0-9a-fA-F]{40}$/.test(raw), `${label} must be a 0x-prefixed 20-byte hex address`);
+
+    return raw as unknown as AccountAddress;
+  }
+
+  private nodeToExplorerTx(block: NodeBlock, tx: NodeTransaction): TransactionDetails {
+    const blockHash = block.block_hash as Hash;
+    const height = this.toPositiveInteger(block.block_number);
+    const timestamp = this.toUnixMsFromRfc3339(tx.timestamp);
+
+    const confirmations = Math.max(0, this.nodeLatestHeight - block.block_number);
+
+    return {
+      hash: tx.tx_id as Hash,
+      blockHash,
+      blockHeight: height,
+      from: this.nodeAddressToAccountAddress(tx.sender, 'tx.sender'),
+      to: this.nodeAddressToAccountAddress(tx.recipient, 'tx.recipient'),
+      value: this.toAttoValue(tx.amount),
+      fee: this.toAttoValue(tx.fee),
+      timestamp,
+      status: 'confirmed',
+      inputs: [],
+      outputs: [],
+      confirmations
+    };
+  }
+
+  private nodeToExplorerBlock(block: NodeBlock): BlockDetails {
+    const height = this.toPositiveInteger(block.block_number);
+    const hash = block.block_hash as Hash;
+    const parentHash = (block.previous_block_hash || null) as Hash | null;
+    const timestamp = this.toUnixMsFromRfc3339(block.timestamp);
+
+    const txDetails = block.transactions.map((tx: NodeTransaction) => this.nodeToExplorerTx(block, tx));
+    const txSummaries = txDetails.map((tx: TransactionDetails) => tx as TransactionSummary);
+    const totalValue = this.computeTotalValue(txSummaries as TransactionSummary[]);
+
+    const confirmations = Math.max(0, this.nodeLatestHeight - block.block_number);
+    const confirmationScore = this.config.finalityLag > 0 ? Math.min(1, confirmations / this.config.finalityLag) : 0;
+    const status: BlockSummary['status'] = confirmations >= this.config.finalityLag ? 'finalized' : 'pending';
+
+    return {
+      height,
+      hash,
+      parentHash,
+      timestamp,
+      transactionCount: txSummaries.length,
+      totalValue,
+      status,
+      confirmationScore,
+      miner: this.nodeAddressToAccountAddress(block.validator_address, 'block.validator_address'),
+      // Node does not currently expose committee membership; keep empty until available.
+      delegateSet: [],
+      transactions: txSummaries
+    };
+  }
+
+  private updateAccountsFromTransaction(tx: TransactionDetails): void {
+    const now = Date.now();
+    const from = this.ensureAccount(tx.from);
+    const to = this.ensureAccount(tx.to);
+
+    from.lastSeen = Math.max(from.lastSeen, now);
+    to.lastSeen = Math.max(to.lastSeen, now);
+
+    from.outbound = this.pushUniqueTx(from.outbound, tx as TransactionSummary);
+    to.inbound = this.pushUniqueTx(to.inbound, tx as TransactionSummary);
+  }
+
+  private async refreshFromNode(): Promise<void> {
+    if (this.nodePollInFlight) {
+      return;
+    }
+    this.nodePollInFlight = true;
+    this.refreshInFlightSubject.next(true);
+
+    try {
+      const [result, health] = await Promise.all([
+        this.jsonRpcCall<NodeGetBlocksResult>('get_blocks'),
+        // Best-effort health fetch for network-wide metadata (validator counts, peers, etc).
+        // Keep this optional so explorer still works against older nodes/proxies.
+        (async () => {
+          try {
+            return await firstValueFrom(this.http.get<unknown>(this.nodeEndpoint('health')));
+          } catch {
+            return undefined;
+          }
+        })()
+      ]);
+
+      const blocks = [...(result.blocks ?? [])].sort((a, b) => a.block_number - b.block_number);
+      const latest = blocks.at(-1)?.block_number ?? 0;
+      this.nodeLatestHeight = latest;
+
+      // Reset caches derived from blocks.
+      this.blockDetails.clear();
+      this.transactionDetails.clear();
+
+      const blockDetails: BlockDetails[] = [];
+      const transactions: TransactionDetails[] = [];
+
+      for (const block of blocks) {
+        const details = this.nodeToExplorerBlock(block);
+        this.blockDetails.set(details.hash, details);
+        blockDetails.push(details);
+
+        for (const tx of details.transactions) {
+          const txDetail = tx as TransactionDetails;
+          this.transactionDetails.set(txDetail.hash, txDetail);
+          transactions.push(txDetail);
+          this.updateAccountsFromTransaction(txDetail);
+        }
+      }
+
+      const summaries = blockDetails.map((b) => this.toSummary(b));
+      this.blocksSubject.next(summaries);
+
+      // Recent transactions sorted by timestamp desc.
+      transactions.sort((a, b) => (b.timestamp as number) - (a.timestamp as number));
+      this.transactionsSubject.next(transactions.slice(0, LATEST_TRANSACTIONS_LIMIT));
+
+      this.publishAccountSnapshots();
+
+      // Network stats (UI-level approximation)
+      const now = Date.now();
+      const finalizedHeight = this.toPositiveInteger(Math.max(0, latest - this.config.finalityLag));
+      const currentHeight = this.toPositiveInteger(latest);
+
+      let averageTps = 0;
+      if (blocks.length >= 2) {
+        const firstTs = Date.parse(blocks[0].timestamp);
+        const lastTs = Date.parse(blocks[blocks.length - 1].timestamp);
+        const seconds = Math.max(1, Math.floor((lastTs - firstTs) / 1000));
+        const txCount = transactions.length;
+        averageTps = txCount / seconds;
+      }
+
+      const uniqueValidators = new Set(blocks.map((b) => b.validator_address));
+
+      // Prefer consensus-reported validator count when available.
+      // The block stream may be too small early on (e.g., only 1 produced block => 1 unique producer).
+      let consensusValidatorCount: number | undefined;
+      if (typeof health === 'object' && health !== null) {
+        const h = health as Record<string, unknown>;
+        const consensus = h['consensus_status'];
+        if (typeof consensus === 'object' && consensus !== null) {
+          const cs = consensus as Record<string, unknown>;
+          const vc = cs['validator_count'];
+          if (typeof vc === 'number' && Number.isFinite(vc) && vc >= 0) {
+            consensusValidatorCount = vc;
+          }
+        }
+      }
+      const activeValidators = this.toPositiveInteger(
+        Math.max(uniqueValidators.size, consensusValidatorCount ?? 0)
+      );
+
+      this.networkSubject.next({
+        currentHeight,
+        finalizedHeight,
+        averageTps,
+        activeValidators,
+        nextElectionEtaMs: 0,
+        timestamp: this.toUnixMs(now)
+      });
+
+      this.lastRefreshedAtSubject.next(Date.now());
+    } catch (err) {
+      console.warn('Failed to refresh explorer data from node', err);
+    } finally {
+      this.nodePollInFlight = false;
+      this.refreshInFlightSubject.next(false);
+    }
   }
 
   private trimAccountsForRemovedBlock(hash: Hash): void {

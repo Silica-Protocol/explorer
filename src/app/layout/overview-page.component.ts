@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { map } from 'rxjs/operators';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import { BlockListComponent } from '@blocks/block-list.component';
-import type { NetworkStatistics, PositiveInteger } from '@chert/ts-models';
+import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explorer-models';
 
 @Component({
   selector: 'overview-page',

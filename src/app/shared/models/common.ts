@@ -4,4 +4,4 @@ export type {
   PositiveInteger,
   UnixMs,
   CommitteeId
-} from '@chert/ts-models';
+} from '@silica-protocol/explorer-models';

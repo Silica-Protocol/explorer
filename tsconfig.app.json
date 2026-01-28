@@ -10,7 +10,6 @@
     "src/main.ts"
   ],
   "include": [
-    "src/**/*.d.ts",
-    "../packages/chert-ts-models/src/**/*.ts"
+    "src/**/*.d.ts"
   ]
 }

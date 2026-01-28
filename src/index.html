@@ -6,6 +6,24 @@
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
+
+    <!--
+      Optional runtime configuration.
+      Set these from your hosting layer (or edit this file for a static deploy) to connect to a node.
+
+      Example:
+        window.__CHERT_EXPLORER__ = {
+          mode: 'node',
+          nodeBaseUrl: 'https://testnet.silicaprotocol.network'
+        };
+    -->
+    <script>
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      window.__CHERT_EXPLORER__ = window.__CHERT_EXPLORER__ || {
+        mode: 'node',
+        nodeBaseUrl: 'https://rpc.testnet.silicaprotocol.network'
+      };
+    </script>
   </head>
   <body>
     <app-root></app-root>

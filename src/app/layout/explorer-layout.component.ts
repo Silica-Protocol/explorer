@@ -20,8 +20,10 @@ import { ExplorerHeaderComponent } from '@app/layout/explorer-header.component';
       .layout {
         display: flex;
         flex-direction: column;
+        align-items: center;
         min-height: 100vh;
         background: radial-gradient(circle at top left, rgba(102, 227, 255, 0.08), transparent 42%), var(--app-bg);
+        width: 100vw;
       }
 
       .layout__content {
@@ -29,7 +31,7 @@ import { ExplorerHeaderComponent } from '@app/layout/explorer-header.component';
         flex: 1;
         margin: 0 auto;
         padding: 1.5rem 0 4rem;
-        display: flex;
+        display: block;
       }
 
       @media (max-width: 960px) {

@@ -5,4 +5,4 @@ export type {
   AccountLookupResponse,
   DelegatorBreakdown,
   AccountStakeDistribution
-} from '@chert/ts-models';
+} from '@silica-protocol/explorer-models';

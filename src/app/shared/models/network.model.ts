@@ -2,4 +2,4 @@ export type {
   NetworkStatistics,
   FinalityLagMetrics,
   NetworkHealthSnapshot
-} from '@chert/ts-models';
+} from '@silica-protocol/explorer-models';

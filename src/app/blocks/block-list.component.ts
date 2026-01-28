@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { Observable } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
-import type { BlockSummary, Hash, UnixMs } from '@chert/ts-models';
+import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-models';
 
 @Component({
   selector: 'block-list',

@@ -3,4 +3,4 @@ export type {
   SearchResultItem,
   SearchQuery,
   SearchResponse
-} from '@chert/ts-models';
+} from '@silica-protocol/explorer-models';
