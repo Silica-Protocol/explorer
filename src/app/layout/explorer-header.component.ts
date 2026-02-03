@@ -26,6 +26,7 @@ import { Observable } from 'rxjs';
           <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }">Blocks</a>
           <a routerLink="/transactions" routerLinkActive="is-active">Transactions</a>
           <a routerLink="/accounts" routerLinkActive="is-active">Accounts</a>
+          <a routerLink="/validators" routerLinkActive="is-active">Validators</a>
         </nav>
 
         <div class="header__tools">
@@ -53,20 +54,29 @@ import { Observable } from 'rxjs';
   `,
   styles: [
     `
+      :host {
+        display: block;
+        width: 100%;
+      }
+
       .header {
         position: sticky;
         top: 0;
         z-index: 20;
         width: 100%;
-        background: rgba(12, 16, 26, 0.72);
-        backdrop-filter: blur(10px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(10, 22, 40, 0.85);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid rgba(14, 165, 233, 0.15);
+        box-shadow: 0 4px 20px rgba(14, 165, 233, 0.08);
+        transition: all 0.3s ease;
       }
 
       .header__inner {
-        width: min(1200px, 94vw);
-        margin: 0 auto;
-        padding: 1.25rem 0;
+        width: 100%;
+        max-width: var(--container-width);
+        margin-left: auto;
+        margin-right: auto;
+        padding: 1rem var(--container-padding-sm);
         display: flex;
         flex-wrap: wrap;
         gap: 1rem;
@@ -74,22 +84,67 @@ import { Observable } from 'rxjs';
         justify-content: space-between;
       }
 
+      @media (min-width: 640px) {
+        .header__inner {
+          padding-left: var(--container-padding-md);
+          padding-right: var(--container-padding-md);
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .header__inner {
+          padding-left: var(--container-padding-lg);
+          padding-right: var(--container-padding-lg);
+        }
+      }
+
       .header__brand {
         display: flex;
         align-items: center;
         gap: 1rem;
+        cursor: pointer;
+        transition: transform 0.3s ease;
+        flex: 0 0 auto;
+      }
+
+      .header__brand:hover {
+        transform: translateY(-2px);
       }
 
       .header__brand-glyph {
         width: 48px;
         height: 48px;
-        border-radius: 14px;
-        background: linear-gradient(135deg, rgba(27, 220, 242, 0.28), rgba(102, 227, 255, 0.12));
-        border: 1px solid rgba(102, 227, 255, 0.24);
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(20, 184, 166, 0.2));
+        border: 1px solid rgba(14, 165, 233, 0.3);
         display: grid;
         place-items: center;
         font-size: 1.4rem;
-        color: var(--accent-strong);
+        color: var(--accent);
+        box-shadow: 0 0 20px rgba(14, 165, 233, 0.2);
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .header__brand-glyph::before {
+        content: '';
+        position: absolute;
+        inset: -2px;
+        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        border-radius: 12px;
+        opacity: 0;
+        filter: blur(8px);
+        transition: opacity 0.3s ease;
+        z-index: -1;
+      }
+
+      .header__brand:hover .header__brand-glyph::before {
+        opacity: 0.5;
+      }
+
+      .header__brand:hover .header__brand-glyph {
+        box-shadow: 0 0 30px rgba(14, 165, 233, 0.4);
+        border-color: rgba(14, 165, 233, 0.5);
       }
 
       .header__brand-text {
@@ -101,6 +156,10 @@ import { Observable } from 'rxjs';
         font-size: 1.45rem;
         font-weight: 600;
         letter-spacing: 0.01em;
+        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
       .header__brand-subtitle {
@@ -114,6 +173,14 @@ import { Observable } from 'rxjs';
         gap: 0.75rem 1rem;
         align-items: center;
         justify-content: flex-end;
+        flex: 1 1 520px;
+        margin-left: auto;
+      }
+
+      explorer-search {
+        flex: 1 1 320px;
+        max-width: 360px;
+        min-width: 220px;
       }
 
       .header__nav {
@@ -122,64 +189,126 @@ import { Observable } from 'rxjs';
         align-items: center;
         padding: 0.3rem 0.6rem;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(14, 165, 233, 0.15);
+        background: rgba(14, 165, 233, 0.05);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+        flex: 0 0 auto;
+      }
+
+      .header__nav:hover {
+        border-color: rgba(14, 165, 233, 0.3);
+        background: rgba(14, 165, 233, 0.08);
       }
 
       .header__nav a {
         color: var(--text-secondary);
         text-decoration: none;
         font-size: 0.9rem;
-        padding: 0.35rem 0.75rem;
+        padding: 0.45rem 0.85rem;
         border-radius: 999px;
-        transition: background 120ms ease, color 120ms ease;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+
+      .header__nav a::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        width: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #0ea5e9, #14b8a6);
+        transform: translateX(-50%);
+        transition: width 0.3s ease;
+      }
+
+      .header__nav a:hover {
+        color: var(--accent);
+      }
+
+      .header__nav a:hover::after {
+        width: 70%;
       }
 
       .header__nav a.is-active {
         color: var(--accent);
-        background: rgba(102, 227, 255, 0.12);
+        background: rgba(14, 165, 233, 0.15);
+        box-shadow: 0 0 10px rgba(14, 165, 233, 0.2);
       }
 
       .header__actions {
         display: flex;
         gap: 0.5rem;
         align-items: center;
+        flex: 0 0 auto;
       }
 
       .btn {
         appearance: none;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        background: rgba(14, 165, 233, 0.05);
         color: inherit;
         border-radius: 999px;
         padding: 0.55rem 0.9rem;
         font-size: 0.9rem;
         line-height: 1;
         cursor: pointer;
-        transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .btn::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(20, 184, 166, 0.05));
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .btn:hover::before {
+        opacity: 1;
       }
 
       .btn:hover {
-        background: rgba(255, 255, 255, 0.07);
-        border-color: rgba(102, 227, 255, 0.35);
+        background: rgba(14, 165, 233, 0.1);
+        border-color: rgba(14, 165, 233, 0.4);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
       }
 
       .btn:active {
-        transform: translateY(1px);
+        transform: translateY(0);
       }
 
       .btn:disabled {
         opacity: 0.55;
         cursor: not-allowed;
+        transform: none;
       }
 
       .btn--primary {
-        border-color: rgba(27, 220, 242, 0.45);
-        background: rgba(27, 220, 242, 0.12);
+        border-color: rgba(14, 165, 233, 0.4);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(20, 184, 166, 0.1));
+        color: #22d3ee;
+        font-weight: 500;
+      }
+
+      .btn--primary:hover {
+        box-shadow: 0 4px 20px rgba(14, 165, 233, 0.3);
+        border-color: rgba(14, 165, 233, 0.6);
       }
 
       .btn--ghost {
         background: rgba(255, 255, 255, 0.02);
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+
+      .btn--ghost:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(14, 165, 233, 0.3);
       }
 
       .header__status {
@@ -188,14 +317,31 @@ import { Observable } from 'rxjs';
         gap: 0.5rem;
         color: var(--text-secondary);
         font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        background: rgba(34, 197, 94, 0.05);
+        border-radius: 999px;
+        border: 1px solid rgba(34, 197, 94, 0.15);
+        flex: 0 0 auto;
       }
 
       .header__status-dot {
         width: 8px;
         height: 8px;
         border-radius: 999px;
-        background: rgba(91, 197, 135, 0.9);
-        box-shadow: 0 0 0 3px rgba(91, 197, 135, 0.15);
+        background: rgba(34, 197, 94, 0.9);
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2), 0 0 10px rgba(34, 197, 94, 0.4);
+        animation: pulse-glow 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse-glow {
+        0%, 100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.7;
+          transform: scale(1.1);
+        }
       }
 
       @media (max-width: 720px) {
@@ -210,11 +356,17 @@ import { Observable } from 'rxjs';
 
         .header__tools {
           justify-content: center;
+          width: 100%;
         }
 
         .header__nav {
           justify-content: center;
           width: 100%;
+        }
+
+        explorer-search {
+          max-width: 100%;
+          flex-basis: 100%;
         }
       }
     `

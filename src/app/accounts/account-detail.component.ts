@@ -210,21 +210,32 @@ import type { BlockSummary } from '@shared/models/block.model';
 
       .block-list a {
         display: grid;
-        grid-template-columns: 90px 1fr 120px;
+        grid-template-columns: minmax(70px, auto) minmax(160px, 1fr) minmax(120px, auto);
         gap: 0.75rem;
         align-items: center;
         text-decoration: none;
         padding: 0.75rem 1rem;
         border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(14, 165, 233, 0.1);
+        background: rgba(14, 165, 233, 0.03);
         color: inherit;
         font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+        transition: all 0.2s ease;
       }
 
       .block-list a:hover,
       .block-list a:focus-visible {
-        background: rgba(102, 227, 255, 0.06);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(20, 184, 166, 0.06));
+        border-color: rgba(14, 165, 233, 0.3);
+        transform: translateX(4px);
+        box-shadow: inset 3px 0 0 rgba(14, 165, 233, 0.6);
+      }
+
+      @media (max-width: 720px) {
+        .block-list a {
+          grid-template-columns: 1fr;
+          gap: 0.35rem;
+        }
       }
 
       .muted {
@@ -245,8 +256,8 @@ import type { BlockSummary } from '@shared/models/block.model';
         display: inline-flex;
         padding: 0.65rem 1.25rem;
         border-radius: 999px;
-        background: rgba(102, 227, 255, 0.16);
-        border: 1px solid rgba(102, 227, 255, 0.45);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(20, 184, 166, 0.12));
+        border: 1px solid rgba(14, 165, 233, 0.5);
         color: var(--accent);
         text-decoration: none;
         font-weight: 600;

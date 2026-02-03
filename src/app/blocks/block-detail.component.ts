@@ -236,8 +236,8 @@ type BlockHash = BlockDetails['hash'];
       .transaction-row {
         text-decoration: none;
         color: inherit;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        transition: background-color 140ms ease;
+        border-bottom: 1px solid rgba(14, 165, 233, 0.08);
+        transition: all 0.2s ease;
       }
 
       .transaction-row:last-of-type {
@@ -246,7 +246,9 @@ type BlockHash = BlockDetails['hash'];
 
       .transaction-row:hover,
       .transaction-row:focus-visible {
-        background: rgba(102, 227, 255, 0.06);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(20, 184, 166, 0.06));
+        transform: translateX(4px);
+        box-shadow: inset 3px 0 0 rgba(14, 165, 233, 0.6);
       }
 
       .transaction-row .hash {
@@ -268,8 +270,8 @@ type BlockHash = BlockDetails['hash'];
         display: inline-flex;
         padding: 0.65rem 1.25rem;
         border-radius: 999px;
-        background: rgba(102, 227, 255, 0.16);
-        border: 1px solid rgba(102, 227, 255, 0.45);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(20, 184, 166, 0.12));
+        border: 1px solid rgba(14, 165, 233, 0.5);
         color: var(--accent);
         text-decoration: none;
         font-weight: 600;
@@ -279,14 +281,12 @@ type BlockHash = BlockDetails['hash'];
       @media (max-width: 960px) {
         .transaction-table__header,
         .transaction-row {
-          grid-template-columns: 2fr 1fr 1fr;
-          grid-template-rows: repeat(2, auto);
+          grid-template-columns: 1.6fr 1fr 1fr;
         }
 
-        .transaction-row span:nth-child(4),
-        .transaction-row span:nth-child(5) {
-          font-size: 0.85rem;
-          color: var(--text-secondary);
+        .transaction-table__header span:nth-child(n + 4),
+        .transaction-row span:nth-child(n + 4) {
+          display: none;
         }
       }
     `

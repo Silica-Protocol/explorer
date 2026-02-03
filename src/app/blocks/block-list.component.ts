@@ -76,8 +76,8 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
       .block-row {
         text-decoration: none;
         color: inherit;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        transition: background-color 140ms ease, transform 140ms ease;
+        border-bottom: 1px solid rgba(14, 165, 233, 0.08);
+        transition: all 0.2s ease;
       }
 
       .block-row:last-of-type {
@@ -86,8 +86,9 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
 
       .block-row:hover,
       .block-row:focus-visible {
-        background: rgba(102, 227, 255, 0.06);
-        transform: translateY(-1px);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(20, 184, 166, 0.05));
+        transform: translateX(4px);
+        box-shadow: inset 4px 0 0 rgba(14, 165, 233, 0.6);
       }
 
       .hash {
@@ -115,25 +116,23 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
 
       .status--finalized {
         color: var(--success);
-        background: rgba(91, 197, 135, 0.16);
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.12));
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        box-shadow: 0 0 10px rgba(34, 197, 94, 0.15);
       }
 
       @media (max-width: 960px) {
         .block-list__header,
         .block-row {
           grid-template-columns: 1fr 1.6fr 1fr;
-          grid-template-rows: repeat(2, auto);
         }
 
         .block-list__header span:nth-child(n + 4) {
           display: none;
         }
 
-        .block-row span:nth-child(4),
-        .block-row span:nth-child(5),
-        .block-row span:nth-child(6) {
-          font-size: 0.85rem;
-          color: var(--text-secondary);
+        .block-row span:nth-child(n + 4) {
+          display: none;
         }
       }
     `

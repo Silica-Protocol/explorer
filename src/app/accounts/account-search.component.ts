@@ -126,9 +126,16 @@ interface AccountLookupState {
       .search-form input {
         padding: 0.75rem 1rem;
         border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        background: rgba(14, 165, 233, 0.05);
         color: inherit;
+        transition: all 0.3s ease;
+      }
+
+      .search-form input:focus {
+        outline: none;
+        border-color: rgba(14, 165, 233, 0.5);
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
       }
 
       .result-card {
@@ -154,10 +161,17 @@ interface AccountLookupState {
       }
 
       .result-card__grid article {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.04), rgba(20, 184, 166, 0.02));
+        border: 1px solid rgba(14, 165, 233, 0.12);
         border-radius: 14px;
         padding: 1rem;
+        transition: all 0.3s ease;
+      }
+
+      .result-card__grid article:hover {
+        border-color: rgba(14, 165, 233, 0.3);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.1);
       }
 
       .result-card__grid h3 {
@@ -196,30 +210,50 @@ interface AccountLookupState {
         gap: 0.75rem;
         padding: 0.7rem 0.9rem;
         border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(14, 165, 233, 0.1);
+        background: rgba(14, 165, 233, 0.03);
         color: inherit;
         text-decoration: none;
         font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+        transition: all 0.2s ease;
+      }
+
+      .history__list a:hover {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(20, 184, 166, 0.06));
+        border-color: rgba(14, 165, 233, 0.3);
+        transform: translateX(4px);
+        box-shadow: inset 3px 0 0 rgba(14, 165, 233, 0.6);
       }
 
       .btn {
         appearance: none;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        background: rgba(14, 165, 233, 0.05);
         color: inherit;
         border-radius: 999px;
         padding: 0.55rem 0.9rem;
         cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .btn:hover {
+        border-color: rgba(14, 165, 233, 0.4);
+        background: rgba(14, 165, 233, 0.1);
+        transform: translateY(-2px);
       }
 
       .btn--primary {
-        border-color: rgba(27, 220, 242, 0.45);
-        background: rgba(27, 220, 242, 0.12);
+        border-color: rgba(14, 165, 233, 0.5);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(20, 184, 166, 0.1));
+        color: var(--accent-light);
+      }
+
+      .btn--primary:hover {
+        box-shadow: 0 4px 16px rgba(14, 165, 233, 0.25);
       }
 
       .btn--ghost {
-        background: rgba(255, 255, 255, 0.02);
+        background: rgba(14, 165, 233, 0.02);
       }
 
       .muted {

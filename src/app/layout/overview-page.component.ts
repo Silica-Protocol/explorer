@@ -70,6 +70,10 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
       h1 {
         font-size: 2rem;
         margin: 0;
+        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
       .overview__subtitle {
@@ -85,14 +89,36 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
       }
 
       .metric-card {
-        background: var(--panel-bg);
-        border: 1px solid var(--panel-border);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.05), rgba(20, 184, 166, 0.03));
+        border: 1px solid rgba(14, 165, 233, 0.15);
         border-radius: 16px;
         padding: 1rem;
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
         min-height: 100px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .metric-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), transparent);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .metric-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(14, 165, 233, 0.4);
+        box-shadow: 0 8px 24px rgba(14, 165, 233, 0.15), 0 0 20px rgba(14, 165, 233, 0.1);
+      }
+
+      .metric-card:hover::before {
+        opacity: 1;
       }
 
       .metric-card h2 {
@@ -100,6 +126,8 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
         font-size: 0.95rem;
         color: var(--text-secondary);
         font-weight: 500;
+        position: relative;
+        z-index: 1;
       }
 
       .metric-card p {
@@ -107,6 +135,12 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
         font-size: 1.75rem;
         font-weight: 600;
         letter-spacing: 0.01em;
+        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        position: relative;
+        z-index: 1;
       }
 
       .section-heading {

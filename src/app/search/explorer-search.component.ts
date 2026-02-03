@@ -96,17 +96,18 @@ const CLOSE_DELAY_MS = 120;
         width: 100%;
         padding: 0.75rem 1rem;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        background: rgba(14, 165, 233, 0.05);
         color: inherit;
         font-size: 0.95rem;
-        transition: border-color 140ms ease, box-shadow 140ms ease;
+        transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
       }
 
       .search__form input[type='search']:focus-visible {
         outline: none;
-        border-color: rgba(102, 227, 255, 0.62);
-        box-shadow: 0 0 0 3px rgba(102, 227, 255, 0.18);
+        border-color: rgba(14, 165, 233, 0.6);
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15), 0 0 20px rgba(14, 165, 233, 0.1);
+        background: rgba(14, 165, 233, 0.08);
       }
 
       .search__panel {
@@ -135,16 +136,18 @@ const CLOSE_DELAY_MS = 120;
         border-radius: 14px;
         text-decoration: none;
         color: inherit;
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        transition: background-color 120ms ease, border-color 120ms ease;
+        background: rgba(14, 165, 233, 0.03);
+        border: 1px solid rgba(14, 165, 233, 0.1);
+        transition: all 0.2s ease;
       }
 
       .search__item:hover,
       .search__item:focus-visible {
-        background: rgba(102, 227, 255, 0.1);
-        border-color: rgba(102, 227, 255, 0.35);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(20, 184, 166, 0.08));
+        border-color: rgba(14, 165, 233, 0.4);
         outline: none;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.15);
       }
 
       .search__item-text {
@@ -175,10 +178,12 @@ const CLOSE_DELAY_MS = 120;
         font-size: 0.75rem;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        background: rgba(255, 255, 255, 0.07);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(20, 184, 166, 0.1));
         border-radius: 999px;
         padding: 0.25rem 0.7rem;
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(14, 165, 233, 0.25);
+        color: var(--accent-light);
+        font-weight: 500;
       }
 
       .search__hint {

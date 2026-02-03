@@ -1,22 +1,76 @@
 :root {
   color-scheme: dark;
-  --app-bg: #0c101a;
-  --panel-bg: rgba(20, 26, 39, 0.92);
-  --panel-border: rgba(255, 255, 255, 0.08);
+  
+  /* Silica Protocol Color Palette (Cyan → Teal → Green) */
+  --silica-cyan-50: #f0fdfd;
+  --silica-cyan-100: #cffafe;
+  --silica-cyan-200: #a5f3fc;
+  --silica-cyan-300: #67e8f9;
+  --silica-cyan-400: #22d3ee;
+  --silica-cyan-500: #06b6d4;
+  --silica-cyan-600: #0891b2;
+  --silica-cyan-700: #0e7490;
+  --silica-cyan-800: #155e75;
+  --silica-cyan-900: #164e63;
+  
+  --silica-teal-50: #f0fdfa;
+  --silica-teal-100: #ccfbf1;
+  --silica-teal-200: #99f6e4;
+  --silica-teal-300: #5eead4;
+  --silica-teal-400: #2dd4bf;
+  --silica-teal-500: #14b8a6;
+  --silica-teal-600: #0d9488;
+  --silica-teal-700: #0f766e;
+  --silica-teal-800: #134e4a;
+  --silica-teal-900: #0d3b35;
+  
+  --silica-green-50: #f0fdf4;
+  --silica-green-100: #dcfce7;
+  --silica-green-200: #bbf7d0;
+  --silica-green-300: #86efac;
+  --silica-green-400: #4ade80;
+  --silica-green-500: #22c55e;
+  --silica-green-600: #16a34a;
+  --silica-green-700: #15803d;
+  --silica-green-800: #166534;
+  --silica-green-900: #145231;
+  
+  /* Updated Theme Colors */
+  --app-bg: #0a1628;
+  --panel-bg: rgba(15, 23, 42, 0.92);
+  --panel-border: rgba(14, 165, 233, 0.12);
   --text-primary: #f5f7fb;
   --text-secondary: rgba(245, 247, 251, 0.72);
-  --accent: #66e3ff;
-  --accent-strong: #1bdcf2;
+  --accent: #0ea5e9;
+  --accent-light: #22d3ee;
+  --accent-medium: #14b8a6;
+  --accent-strong: #06b6d4;
   --danger: #ff6b6b;
-  --success: #5bc587;
+  --success: #22c55e;
+  
+  /* Gradient Colors */
+  --gradient-primary: linear-gradient(135deg, #0ea5e9 0%, #22d3ee 25%, #14b8a6 50%, #0d9488 100%);
+  --gradient-cyan-teal: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 100%);
+  --gradient-teal-green: linear-gradient(135deg, #14b8a6 0%, #22c55e 100%);
+  --gradient-full: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 50%, #22c55e 100%);
+
+  /* Shared layout sizing - full width with comfortable margins */
+  --container-width: 96rem; /* 1536px - wider for modern displays */
+  --container-padding-sm: 1rem;
+  --container-padding-md: 1.5rem;
+  --container-padding-lg: 2rem;
+  
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--app-bg);
 }
 
+
+
 html,
 body {
   margin: 0;
-  min-height: 100%;
+  min-height: 100vh;
+  width: 100%;
   background-color: var(--app-bg);
   color: var(--text-primary);
 }
@@ -37,29 +91,80 @@ a:hover {
 }
 
 body {
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 
 app-root {
-  display: flex;
-  flex: 1;
+  display: block;
+  width: 100%;
+  min-height: 100vh;
 }
 
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+    box-shadow: 0 0 20px rgba(14, 165, 233, 0.3);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 40px rgba(14, 165, 233, 0.6);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes rotate-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Custom Scrollbar with Silica gradient */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(10, 22, 40, 0.5);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  background: linear-gradient(180deg, #0ea5e9, #14b8a6);
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.32);
+  background: linear-gradient(180deg, #06b6d4, #0d9488);
+}
+
+/* Selection */
+::selection {
+  background: rgba(14, 165, 233, 0.3);
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background: rgba(14, 165, 233, 0.3);
+  color: #ffffff;
 }

@@ -5,11 +5,16 @@ import { TransactionDetailComponent } from '@transactions/transaction-detail.com
 import { TransactionSearchComponent } from '@transactions/transaction-search.component';
 import { AccountDetailComponent } from '@accounts/account-detail.component';
 import { AccountSearchComponent } from '@accounts/account-search.component';
+import { ValidatorsPageComponent } from '@app/validators/validators-page.component';
 
 export const APP_ROUTES: Routes = [
   {
     path: '',
     component: OverviewPageComponent
+  },
+  {
+    path: 'validators',
+    component: ValidatorsPageComponent
   },
   {
     path: 'block/:hash',

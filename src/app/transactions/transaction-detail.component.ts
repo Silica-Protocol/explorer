@@ -149,16 +149,18 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
       .tx-detail__status {
         padding: 0.35rem 0.9rem;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        background: rgba(14, 165, 233, 0.05);
         letter-spacing: 0.05em;
         font-size: 0.85rem;
+        transition: all 0.3s ease;
       }
 
       .tx-detail__status--confirmed {
-        border-color: rgba(102, 227, 255, 0.45);
-        background: rgba(102, 227, 255, 0.12);
+        border-color: rgba(14, 165, 233, 0.5);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(20, 184, 166, 0.1));
         color: var(--accent);
+        box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
       }
 
       .tx-detail__grid {
@@ -232,9 +234,16 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
 
       .block-summary div {
         border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(14, 165, 233, 0.12);
         padding: 1rem;
-        background: rgba(255, 255, 255, 0.02);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.04), rgba(20, 184, 166, 0.02));
+        transition: all 0.3s ease;
+      }
+
+      .block-summary div:hover {
+        border-color: rgba(14, 165, 233, 0.3);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.1);
       }
 
       .muted {
@@ -255,12 +264,19 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
         display: inline-flex;
         padding: 0.65rem 1.25rem;
         border-radius: 999px;
-        background: rgba(102, 227, 255, 0.16);
-        border: 1px solid rgba(102, 227, 255, 0.45);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(20, 184, 166, 0.12));
+        border: 1px solid rgba(14, 165, 233, 0.5);
         color: var(--accent);
         text-decoration: none;
         font-weight: 600;
         letter-spacing: 0.02em;
+        transition: all 0.3s ease;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(14, 165, 233, 0.25);
+        border-color: rgba(14, 165, 233, 0.7);
       }
     `
   ],
