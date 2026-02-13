@@ -223,9 +223,9 @@ const DEGRADED_TPS_THRESHOLD = 1;
       }
 
       h1 {
-        font-size: 2rem;
+        font-size: var(--h1-size);
         margin: 0;
-        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        background: var(--gradient-h1);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -341,19 +341,19 @@ const DEGRADED_TPS_THRESHOLD = 1;
       .metric-card--emerald::before { background: linear-gradient(180deg, #10b981, #059669); }
 
       .metric-card h2 {
-        margin: 0;
-        font-size: 0.85rem;
+        font-size: var(--metric-label-size);
         color: var(--text-secondary);
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 0.04em;
+        margin: 0;
       }
 
       .metric-value {
         margin: 0;
-        font-size: 1.8rem;
+        font-size: var(--metric-value-size);
         font-weight: 700;
-        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        background: var(--gradient-h1);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -378,8 +378,8 @@ const DEGRADED_TPS_THRESHOLD = 1;
       }
 
       .section-heading h2 {
+        font-size: var(--h2-size);
         margin: 0;
-        font-size: 1.25rem;
       }
 
       .muted {

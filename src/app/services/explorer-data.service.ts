@@ -191,6 +191,124 @@ export class ExplorerDataService implements OnDestroy {
     return result;
   }
 
+  async fetchStakingInfo(): Promise<{
+    total_staked: string;
+    total_validators: number;
+    active_delegators: number;
+    avg_apy: number;
+    total_rewards: string;
+  }> {
+    return await this.jsonRpcCall<{
+      total_staked: string;
+      total_validators: number;
+      active_delegators: number;
+      avg_apy: number;
+      total_rewards: string;
+    }>('get_staking_info', {});
+  }
+
+  async fetchStakingDelegations(limit: number = 50): Promise<Array<{
+    validator_address: string;
+    delegator_address: string;
+    amount: string;
+    rewards: string;
+    last_claimed: string;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      validator_address: string;
+      delegator_address: string;
+      amount: string;
+      rewards: string;
+      last_claimed: string;
+    }>>('get_staking_delegations', { limit });
+  }
+
+  async fetchPrivacyInfo(): Promise<{
+    total_shielded: string;
+    total_unshielded: string;
+    active_shielded_accounts: number;
+    pending_operations: number;
+  }> {
+    return await this.jsonRpcCall<{
+      total_shielded: string;
+      total_unshielded: string;
+      active_shielded_accounts: number;
+      pending_operations: number;
+    }>('get_privacy_info', {});
+  }
+
+  async fetchPrivacyOperations(limit: number = 50): Promise<Array<{
+    id: string;
+    type: 'shield' | 'unshield' | 'transfer';
+    sender: string;
+    recipient: string;
+    amount: string;
+    status: 'pending' | 'completed' | 'failed';
+    timestamp: string;
+    tx_hash: string;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      id: string;
+      type: 'shield' | 'unshield' | 'transfer';
+      sender: string;
+      recipient: string;
+      amount: string;
+      status: 'pending' | 'completed' | 'failed';
+      timestamp: string;
+      tx_hash: string;
+    }>>('get_privacy_operations', { limit });
+  }
+
+  async fetchGovernanceInfo(): Promise<{
+    active_proposals: number;
+    total_proposals: number;
+    dao_treasury: string;
+    voter_participation: number;
+  }> {
+    return await this.jsonRpcCall<{
+      active_proposals: number;
+      total_proposals: number;
+      dao_treasury: string;
+      voter_participation: number;
+    }>('get_governance_info', {});
+  }
+
+  async fetchProposals(status?: string, limit: number = 20): Promise<Array<{
+    id: string;
+    title: string;
+    description: string;
+    status: 'active' | 'passed' | 'rejected' | 'executed';
+    votes_for: string;
+    votes_against: string;
+    quorum: number;
+    end_time: string;
+    proposer: string;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      id: string;
+      title: string;
+      description: string;
+      status: 'active' | 'passed' | 'rejected' | 'executed';
+      votes_for: string;
+      votes_against: string;
+      quorum: number;
+      end_time: string;
+      proposer: string;
+    }>>('get_proposals', { status, limit });
+  }
+
+  async fetchTreasury(): Promise<{
+    total_balance: string;
+    last_month_in: string;
+    last_month_out: string;
+  }> {
+    return await this.jsonRpcCall<{
+      total_balance: string;
+      last_month_in: string;
+      last_month_out: string;
+    }>('get_treasury', {});
+  }
+
   start(): void {
     if (this.running) {
       return;

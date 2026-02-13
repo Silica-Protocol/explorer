@@ -68,9 +68,9 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
       }
 
       h1 {
-        font-size: 2rem;
+        font-size: var(--h1-size);
         margin: 0;
-        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        background: var(--gradient-h1);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -132,10 +132,10 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
 
       .metric-card p {
         margin: 0;
-        font-size: 1.75rem;
+        font-size: var(--metric-value-size);
         font-weight: 600;
         letter-spacing: 0.01em;
-        background: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
+        background: var(--gradient-h1);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -151,8 +151,8 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
       }
 
       .section-heading h2 {
+        font-size: var(--h2-size);
         margin: 0;
-        font-size: 1.25rem;
       }
 
       .section-subtitle {

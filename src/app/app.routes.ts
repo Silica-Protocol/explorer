@@ -6,6 +6,9 @@ import { TransactionSearchComponent } from '@transactions/transaction-search.com
 import { AccountDetailComponent } from '@accounts/account-detail.component';
 import { AccountSearchComponent } from '@accounts/account-search.component';
 import { ValidatorsPageComponent } from '@app/validators/validators-page.component';
+import { StakingPageComponent } from '@app/staking/staking-page.component';
+import { PrivacyPageComponent } from '@app/privacy/privacy-page.component';
+import { GovernancePageComponent } from '@app/governance/governance-page.component';
 
 export const APP_ROUTES: Routes = [
   {
@@ -15,6 +18,18 @@ export const APP_ROUTES: Routes = [
   {
     path: 'validators',
     component: ValidatorsPageComponent
+  },
+  {
+    path: 'staking',
+    component: StakingPageComponent
+  },
+  {
+    path: 'privacy',
+    component: PrivacyPageComponent
+  },
+  {
+    path: 'governance',
+    component: GovernancePageComponent
   },
   {
     path: 'block/:hash',

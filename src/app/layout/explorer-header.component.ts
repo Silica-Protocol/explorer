@@ -27,6 +27,9 @@ import { Observable } from 'rxjs';
           <a routerLink="/transactions" routerLinkActive="is-active">Transactions</a>
           <a routerLink="/accounts" routerLinkActive="is-active">Accounts</a>
           <a routerLink="/validators" routerLinkActive="is-active">Validators</a>
+          <a routerLink="/staking" routerLinkActive="is-active">Staking</a>
+          <a routerLink="/privacy" routerLinkActive="is-active">Privacy</a>
+          <a routerLink="/governance" routerLinkActive="is-active">Governance</a>
         </nav>
 
         <div class="header__tools">

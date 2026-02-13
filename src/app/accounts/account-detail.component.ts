@@ -146,11 +146,12 @@ import type { BlockSummary } from '@shared/models/block.model';
       }
 
       .account-detail__grid h2 {
-        margin: 0;
+        font-size: var(--metric-label-size);
         color: var(--text-secondary);
-        font-size: 0.9rem;
-        letter-spacing: 0.05em;
+        font-weight: 500;
         text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0;
       }
 
       .account-detail__grid p {

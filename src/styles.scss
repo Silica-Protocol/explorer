@@ -53,6 +53,7 @@
   --gradient-cyan-teal: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 100%);
   --gradient-teal-green: linear-gradient(135deg, #14b8a6 0%, #22c55e 100%);
   --gradient-full: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 50%, #22c55e 100%);
+  --gradient-h1: linear-gradient(135deg, #0ea5e9, #14b8a6, #22c55e);
 
   /* Shared layout sizing - full width with comfortable margins */
   --container-width: 96rem; /* 1536px - wider for modern displays */
@@ -60,6 +61,13 @@
   --container-padding-md: 1.5rem;
   --container-padding-lg: 2rem;
   
+  /* Shared Heading Styles */
+  --h1-size: 2rem;
+  --h2-size: 1.25rem;
+  --h3-size: 1rem;
+  --metric-label-size: 0.9rem;
+  --metric-value-size: 1.75rem;
+
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--app-bg);
 }
@@ -162,6 +170,51 @@ app-root {
 ::selection {
   background: rgba(14, 165, 233, 0.3);
   color: #ffffff;
+}
+
+::moz-selection {
+  background: rgba(14, 165, 233, 0.3);
+  color: #ffffff;
+}
+
+/* Shared Heading Styles */
+h1 {
+  font-size: var(--h1-size);
+  margin: 0;
+  background: var(--gradient-h1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+h2 {
+  font-size: var(--h2-size);
+  margin: 0;
+}
+
+h3 {
+  font-size: var(--h3-size);
+  margin: 0;
+}
+
+/* Section heading for consistency across pages */
+.section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.section-heading h2 {
+  font-size: var(--h2-size);
+}
+
+/* Shared metric card label style */
+.metric-card h2 {
+  font-size: var(--metric-label-size);
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 ::-moz-selection {
