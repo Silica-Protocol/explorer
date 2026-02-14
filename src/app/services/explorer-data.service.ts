@@ -309,6 +309,138 @@ export class ExplorerDataService implements OnDestroy {
     }>('get_treasury', {});
   }
 
+  async fetchTokens(limit: number = 50): Promise<Array<{
+    address: string;
+    name: string;
+    symbol: string;
+    decimals: number;
+    total_supply: string;
+    holder_count: number;
+    transfer_count: number;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      address: string;
+      name: string;
+      symbol: string;
+      decimals: number;
+      total_supply: string;
+      holder_count: number;
+      transfer_count: number;
+    }>>('get_tokens', { limit });
+  }
+
+  async fetchToken(tokenAddress: string): Promise<{
+    address: string;
+    name: string;
+    symbol: string;
+    decimals: number;
+    total_supply: string;
+    holder_count: number;
+    transfer_count: number;
+    creator: string;
+    deploy_block: number;
+  }> {
+    return await this.jsonRpcCall<{
+      address: string;
+      name: string;
+      symbol: string;
+      decimals: number;
+      total_supply: string;
+      holder_count: number;
+      transfer_count: number;
+      creator: string;
+      deploy_block: number;
+    }>('get_token', { address: tokenAddress });
+  }
+
+  async fetchTokenHolders(tokenAddress: string, limit: number = 50): Promise<Array<{
+    address: string;
+    balance: string;
+    percentage: number;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      address: string;
+      balance: string;
+      percentage: number;
+    }>>('get_token_holders', { address: tokenAddress, limit });
+  }
+
+  async fetchTokenTransfers(tokenAddress: string, limit: number = 50): Promise<Array<{
+    hash: string;
+    from: string;
+    to: string;
+    value: string;
+    timestamp: string;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      hash: string;
+      from: string;
+      to: string;
+      value: string;
+      timestamp: string;
+    }>>('get_token_transfers', { address: tokenAddress, limit });
+  }
+
+  async fetchContractCode(contractAddress: string): Promise<{
+    code: string;
+    bytecode: string;
+    is_verified: boolean;
+  }> {
+    return await this.jsonRpcCall<{
+      code: string;
+      bytecode: string;
+      is_verified: boolean;
+    }>('get_contract_code', { address: contractAddress });
+  }
+
+  async fetchContractAbi(contractAddress: string): Promise<{
+    abi: string;
+    is_verified: boolean;
+  }> {
+    return await this.jsonRpcCall<{
+      abi: string;
+      is_verified: boolean;
+    }>('get_contract_abi', { address: contractAddress });
+  }
+
+  async fetchEvents(params: {
+    address?: string;
+    transactionHash?: string;
+    fromBlock?: number;
+    toBlock?: number;
+    limit?: number;
+  }): Promise<Array<{
+    address: string;
+    topics: string[];
+    data: string;
+    transactionHash: string;
+    blockNumber: number;
+    logIndex: number;
+    timestamp: string;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      address: string;
+      topics: string[];
+      data: string;
+      transactionHash: string;
+      blockNumber: number;
+      logIndex: number;
+      timestamp: string;
+    }>>('get_events', params);
+  }
+
+  async fetchAnalytics(): Promise<{
+    tps_history: Array<{ timestamp: string; tps: number }>;
+    gas_usage: Array<{ timestamp: string; gas_used: string }>;
+    tx_volume: Array<{ timestamp: string; volume: string }>;
+  }> {
+    return await this.jsonRpcCall<{
+      tps_history: Array<{ timestamp: string; tps: number }>;
+      gas_usage: Array<{ timestamp: string; gas_used: string }>;
+      tx_volume: Array<{ timestamp: string; volume: string }>;
+    }>('get_analytics', {});
+  }
+
   start(): void {
     if (this.running) {
       return;

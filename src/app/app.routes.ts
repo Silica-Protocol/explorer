@@ -9,6 +9,11 @@ import { ValidatorsPageComponent } from '@app/validators/validators-page.compone
 import { StakingPageComponent } from '@app/staking/staking-page.component';
 import { PrivacyPageComponent } from '@app/privacy/privacy-page.component';
 import { GovernancePageComponent } from '@app/governance/governance-page.component';
+import { TokensPageComponent } from '@app/tokens/tokens-page.component';
+import { TokenDetailPageComponent } from '@app/tokens/token-detail.component';
+import { ContractViewerPageComponent } from '@app/contracts/contract-viewer.component';
+import { EventsPageComponent } from '@app/events/events-page.component';
+import { AnalyticsPageComponent } from '@app/analytics/analytics-page.component';
 
 export const APP_ROUTES: Routes = [
   {
@@ -30,6 +35,26 @@ export const APP_ROUTES: Routes = [
   {
     path: 'governance',
     component: GovernancePageComponent
+  },
+  {
+    path: 'tokens',
+    component: TokensPageComponent
+  },
+  {
+    path: 'token/:address',
+    component: TokenDetailPageComponent
+  },
+  {
+    path: 'contract/:address',
+    component: ContractViewerPageComponent
+  },
+  {
+    path: 'events',
+    component: EventsPageComponent
+  },
+  {
+    path: 'analytics',
+    component: AnalyticsPageComponent
   },
   {
     path: 'block/:hash',
