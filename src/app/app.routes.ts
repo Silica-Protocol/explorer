@@ -14,6 +14,9 @@ import { TokenDetailPageComponent } from '@app/tokens/token-detail.component';
 import { ContractViewerPageComponent } from '@app/contracts/contract-viewer.component';
 import { EventsPageComponent } from '@app/events/events-page.component';
 import { AnalyticsPageComponent } from '@app/analytics/analytics-page.component';
+import { ParamsPageComponent } from '@app/chain/params-page.component';
+import { NodesPageComponent } from '@app/nodes/nodes-page.component';
+import { BridgePageComponent } from '@app/bridge/bridge-page.component';
 
 export const APP_ROUTES: Routes = [
   {
@@ -55,6 +58,18 @@ export const APP_ROUTES: Routes = [
   {
     path: 'analytics',
     component: AnalyticsPageComponent
+  },
+  {
+    path: 'chain-params',
+    component: ParamsPageComponent
+  },
+  {
+    path: 'nodes',
+    component: NodesPageComponent
+  },
+  {
+    path: 'bridge',
+    component: BridgePageComponent
   },
   {
     path: 'block/:hash',

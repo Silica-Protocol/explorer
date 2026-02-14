@@ -441,6 +441,96 @@ export class ExplorerDataService implements OnDestroy {
     }>('get_analytics', {});
   }
 
+  async fetchChainParameters(): Promise<{
+    chain_id: number;
+    block_time_ms: number;
+    max_block_size: number;
+    max_tx_per_block: number;
+    gas_price_min: string;
+    gas_price_max: string;
+    validator_count: number;
+    committee_size: number;
+    epoch_duration_blocks: number;
+    min_stake: string;
+    reward_rate: string;
+  }> {
+    return await this.jsonRpcCall<{
+      chain_id: number;
+      block_time_ms: number;
+      max_block_size: number;
+      max_tx_per_block: number;
+      gas_price_min: string;
+      gas_price_max: string;
+      validator_count: number;
+      committee_size: number;
+      epoch_duration_blocks: number;
+      min_stake: string;
+      reward_rate: string;
+    }>('get_chain_parameters', {});
+  }
+
+  async fetchNodes(): Promise<Array<{
+    node_id: string;
+    address: string;
+    status: 'online' | 'offline' | 'syncing';
+    height: number;
+    latency_ms: number;
+    last_block_time: string;
+    version: string;
+    uptime_seconds: number;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      node_id: string;
+      address: string;
+      status: 'online' | 'offline' | 'syncing';
+      height: number;
+      latency_ms: number;
+      last_block_time: string;
+      version: string;
+      uptime_seconds: number;
+    }>>('get_nodes', {});
+  }
+
+  async fetchBridgeHistory(limit: number = 50): Promise<Array<{
+    id: string;
+    type: 'deposit' | 'withdraw';
+    source_chain: string;
+    destination_chain: string;
+    sender: string;
+    recipient: string;
+    amount: string;
+    status: 'pending' | 'completed' | 'failed';
+    timestamp: string;
+    tx_hash: string;
+  }>> {
+    return await this.jsonRpcCall<Array<{
+      id: string;
+      type: 'deposit' | 'withdraw';
+      source_chain: string;
+      destination_chain: string;
+      sender: string;
+      recipient: string;
+      amount: string;
+      status: 'pending' | 'completed' | 'failed';
+      timestamp: string;
+      tx_hash: string;
+    }>>('get_bridge_history', { limit });
+  }
+
+  async fetchBridgeStats(): Promise<{
+    total_deposits: string;
+    total_withdraws: string;
+    active_transfers: number;
+    supported_chains: string[];
+  }> {
+    return await this.jsonRpcCall<{
+      total_deposits: string;
+      total_withdraws: string;
+      active_transfers: number;
+      supported_chains: string[];
+    }>('get_bridge_stats', {});
+  }
+
   start(): void {
     if (this.running) {
       return;

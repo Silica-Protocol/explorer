@@ -30,6 +30,9 @@ import { Observable } from 'rxjs';
           <a routerLink="/validators" routerLinkActive="is-active">Validators</a>
           <a routerLink="/analytics" routerLinkActive="is-active">Analytics</a>
           <a routerLink="/events" routerLinkActive="is-active">Events</a>
+          <a routerLink="/bridge" routerLinkActive="is-active">Bridge</a>
+          <a routerLink="/chain-params" routerLinkActive="is-active">Params</a>
+          <a routerLink="/nodes" routerLinkActive="is-active">Nodes</a>
           <a routerLink="/staking" routerLinkActive="is-active">Staking</a>
           <a routerLink="/privacy" routerLinkActive="is-active">Privacy</a>
           <a routerLink="/governance" routerLinkActive="is-active">Governance</a>
