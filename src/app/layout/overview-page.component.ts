@@ -3,12 +3,13 @@ import { CommonModule } from '@angular/common';
 import { map } from 'rxjs/operators';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import { BlockListComponent } from '@blocks/block-list.component';
+import { BlockVisualizerComponent } from '@app/visualizer/block-visualizer.component';
 import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explorer-models';
 
 @Component({
   selector: 'overview-page',
   standalone: true,
-  imports: [CommonModule, BlockListComponent],
+  imports: [CommonModule, BlockListComponent, BlockVisualizerComponent],
   template: `
     <section class="overview" aria-labelledby="overview-heading">
       <header class="overview__header">
@@ -35,6 +36,8 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
           </article>
         </div>
       </header>
+
+      <block-visualizer></block-visualizer>
 
       <section aria-labelledby="blocks-heading">
         <div class="section-heading">
