@@ -525,6 +525,7 @@ export class AnalyticsPageComponent implements OnInit {
 
     try {
       const analytics = await this.data.fetchAnalytics();
+      console.log('Analytics data:', analytics);
 
       this.tpsData = (analytics.tps_history || []).map(p => ({
         timestamp: this.formatTimestamp(p.timestamp),

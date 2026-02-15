@@ -431,13 +431,13 @@ export class ExplorerDataService implements OnDestroy {
 
   async fetchAnalytics(): Promise<{
     tps_history: Array<{ timestamp: string; tps: number }>;
-    gas_usage: Array<{ timestamp: string; gas_used: string }>;
-    tx_volume: Array<{ timestamp: string; volume: string }>;
+    gas_usage: Array<{ timestamp: string; gas_used: number }>;
+    tx_volume: Array<{ timestamp: string; volume: number }>;
   }> {
     return await this.jsonRpcCall<{
       tps_history: Array<{ timestamp: string; tps: number }>;
-      gas_usage: Array<{ timestamp: string; gas_used: string }>;
-      tx_volume: Array<{ timestamp: string; volume: string }>;
+      gas_usage: Array<{ timestamp: string; gas_used: number }>;
+      tx_volume: Array<{ timestamp: string; volume: number }>;
     }>('get_analytics', {});
   }
 
@@ -479,7 +479,7 @@ export class ExplorerDataService implements OnDestroy {
     version: string;
     uptime_seconds: number;
   }>> {
-    return await this.jsonRpcCall<Array<{
+    const response = await this.jsonRpcCall<{nodes: Array<{
       node_id: string;
       address: string;
       status: 'online' | 'offline' | 'syncing';
@@ -488,7 +488,8 @@ export class ExplorerDataService implements OnDestroy {
       last_block_time: string;
       version: string;
       uptime_seconds: number;
-    }>>('get_nodes', {});
+    }>}>('get_nodes', {});
+    return response.nodes;
   }
 
   async fetchBridgeHistory(limit: number = 50): Promise<Array<{
