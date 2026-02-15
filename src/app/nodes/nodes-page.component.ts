@@ -412,7 +412,7 @@ export class NodesPageComponent implements OnInit {
     this.error = null;
 
     try {
-      const nodes = await this.data.fetchNodes().catch(() => []);
+      const nodes = await this.data.fetchNodes();
 
       this.nodes = nodes.map(n => ({
         nodeId: n.node_id,
@@ -427,27 +427,12 @@ export class NodesPageComponent implements OnInit {
 
       this.networkOnline = this.onlineCount > 0;
 
-      if (this.nodes.length === 0) {
-        this.loadMockNodes();
-      }
-
     } catch (err) {
+      this.error = 'Failed to load node data';
       console.error('Nodes load error:', err);
-      this.loadMockNodes();
     } finally {
       this.loading = false;
     }
-  }
-
-  private loadMockNodes(): void {
-    this.nodes = [
-      { nodeId: 'node-001', address: '10.0.1.1:30303', status: 'online', height: 1523456, latencyMs: 45, lastBlockTime: new Date().toISOString(), version: '1.2.3', uptimeSeconds: 864000 },
-      { nodeId: 'node-002', address: '10.0.1.2:30303', status: 'online', height: 1523456, latencyMs: 52, lastBlockTime: new Date().toISOString(), version: '1.2.3', uptimeSeconds: 432000 },
-      { nodeId: 'node-003', address: '10.0.1.3:30303', status: 'syncing', height: 1523450, latencyMs: 120, lastBlockTime: new Date().toISOString(), version: '1.2.3', uptimeSeconds: 172800 },
-      { nodeId: 'node-004', address: '10.0.1.4:30303', status: 'online', height: 1523456, latencyMs: 38, lastBlockTime: new Date().toISOString(), version: '1.2.3', uptimeSeconds: 259200 },
-      { nodeId: 'node-005', address: '10.0.1.5:30303', status: 'offline', height: 1523000, latencyMs: 9999, lastBlockTime: new Date(Date.now() - 3600000).toISOString(), version: '1.2.3', uptimeSeconds: 0 },
-    ];
-    this.networkOnline = this.onlineCount > 0;
   }
 
   formatAddress(address: string): string {

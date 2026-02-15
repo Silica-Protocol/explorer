@@ -232,48 +232,28 @@ export class ParamsPageComponent implements OnInit {
     this.error = null;
 
     try {
-      const params = await this.data.fetchChainParameters().catch(() => null);
+      const params = await this.data.fetchChainParameters();
 
-      if (params) {
-        this.params = {
-          chainId: params.chain_id,
-          blockTimeMs: params.block_time_ms,
-          maxBlockSize: params.max_block_size,
-          maxTxPerBlock: params.max_tx_per_block,
-          gasPriceMin: parseFloat(params.gas_price_min),
-          gasPriceMax: parseFloat(params.gas_price_max),
-          validatorCount: params.validator_count,
-          committeeSize: params.committee_size,
-          epochDurationBlocks: params.epoch_duration_blocks,
-          minStake: parseFloat(params.min_stake) / 1_000_000,
-          rewardRate: parseFloat(params.reward_rate)
-        };
-      } else {
-        this.loadMockParams();
-      }
+      this.params = {
+        chainId: params.chain_id,
+        blockTimeMs: params.block_time_ms,
+        maxBlockSize: params.max_block_size,
+        maxTxPerBlock: params.max_tx_per_block,
+        gasPriceMin: parseFloat(params.gas_price_min),
+        gasPriceMax: parseFloat(params.gas_price_max),
+        validatorCount: params.validator_count,
+        committeeSize: params.committee_size,
+        epochDurationBlocks: params.epoch_duration_blocks,
+        minStake: parseFloat(params.min_stake) / 1_000_000,
+        rewardRate: parseFloat(params.reward_rate)
+      };
 
     } catch (err) {
+      this.error = 'Failed to load chain parameters';
       console.error('Chain params load error:', err);
-      this.loadMockParams();
     } finally {
       this.loading = false;
     }
-  }
-
-  private loadMockParams(): void {
-    this.params = {
-      chainId: 142857,
-      blockTimeMs: 4000,
-      maxBlockSize: 1048576,
-      maxTxPerBlock: 10000,
-      gasPriceMin: 1000,
-      gasPriceMax: 1000000,
-      validatorCount: 16,
-      committeeSize: 8,
-      epochDurationBlocks: 28800,
-      minStake: 10000,
-      rewardRate: 5
-    };
   }
 
   formatCoins(value: number): string {

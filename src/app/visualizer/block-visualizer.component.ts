@@ -2,8 +2,9 @@ import { ChangeDetectionStrategy, Component, OnInit, OnDestroy } from '@angular/
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { Subject, interval } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, map } from 'rxjs/operators';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import type { BlockSummary } from '@silica-protocol/explorer-models';
 
 interface BlockVisual {
   id: string;
@@ -277,8 +278,8 @@ interface BlockVisual {
       .speed-line:nth-child(5) { top: 50%; animation-delay: 0.3s; animation-duration: 1.1s; }
 
       @keyframes speedLine {
-        0% { left: -100%; width: 50%; }
-        100% { left: 150%; width: 30%; }
+        0% { left: 150%; width: 30%; }
+        100% { left: -100%; width: 50%; }
       }
 
       .visualizer__info {
@@ -339,73 +340,90 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
   }
 
   private startVisualization(): void {
-    for (let i = 0; i < 15; i++) {
-      this.spawnBlock(true);
-    }
+    this.data.blocks$.pipe(takeUntil(this.destroy$)).subscribe(blocks => {
+      if (blocks && blocks.length > 0) {
+        const recentBlocks = blocks.slice(-20).reverse();
+        this.displayedBlocks = recentBlocks.map((block, i) => ({
+          id: String(block.height),
+          hash: String(block.hash),
+          txCount: Number(block.transactionCount) || 0,
+          timestamp: Number(block.timestamp),
+          x: this.width - (i * 60) - 50,
+          y: this.height / 2 + (Math.random() - 0.5) * 80,
+          opacity: 1,
+          scale: 1
+        }));
+        this.totalBlocks = blocks.length;
+        this.totalTransactions = blocks.reduce((sum, b) => sum + (Number(b.transactionCount) || 0), 0);
+      }
+    });
   }
 
-  private spawnBlock(initial = false): void {
-    const now = Date.now();
-    const hash = this.generateHash();
-    
-    const block: BlockVisual = {
-      id: `block-${now}-${Math.random()}`,
-      hash,
-      txCount: Math.floor(Math.random() * 50) + 1,
-      timestamp: now,
-      x: initial ? this.width / 2 + (Math.random() - 0.5) * 200 : -this.blockSize,
-      y: this.height / 2 + (Math.random() - 0.5) * 100,
-      opacity: initial ? 1 : 0,
-      scale: initial ? 1 : 0.5
-    };
-    
-    this.displayedBlocks.push(block);
-    this.totalBlocks++;
-    this.totalTransactions += block.txCount;
-    
-    if (!initial) {
+  private spawnBlock(): void {
+    this.data.blocks$.pipe(
+      takeUntil(this.destroy$),
+      map(blocks => blocks && blocks.length > 0 ? blocks[blocks.length - 1] : null)
+    ).subscribe(latestBlock => {
+      if (!latestBlock) return;
+      
+      const now = Date.now();
+      const block: BlockVisual = {
+        id: String(latestBlock.height),
+        hash: String(latestBlock.hash),
+        txCount: Number(latestBlock.transactionCount) || 0,
+        timestamp: now,
+        x: this.width + this.blockSize,
+        y: this.height / 2 + (Math.random() - 0.5) * 100,
+        opacity: 0,
+        scale: 0.5
+      };
+      
+      this.displayedBlocks.unshift(block);
+      this.totalBlocks++;
+      this.totalTransactions += block.txCount;
       this.blockTimes.push(now);
+      
       if (this.blockTimes.length > 10) {
         this.blockTimes.shift();
       }
       this.calculateBps();
-    }
-    
-    this.lastBlockTime = now;
+      this.lastBlockTime = now;
+    });
   }
 
   private update(): void {
     const now = Date.now();
     
-    // Spawn new blocks based on block time (faster for demo)
-    if (now - this.lastBlockTime > 500) {
-      this.spawnBlock();
-    }
+    this.data.blocks$.pipe(takeUntil(this.destroy$)).subscribe(blocks => {
+      if (blocks && blocks.length > 0) {
+        const latestBlock = blocks[blocks.length - 1];
+        const latestBlockNum = Number(latestBlock.height);
+        
+        const existingIds = new Set(this.displayedBlocks.map(b => b.id));
+        if (!existingIds.has(String(latestBlockNum))) {
+          this.spawnBlockFromData(latestBlock);
+        }
+      }
+    });
     
-    // Update existing blocks
     this.displayedBlocks = this.displayedBlocks
       .map(block => {
         const age = now - block.timestamp;
         
-        // Move blocks to the right
-        let newX = block.x + 2 + Math.random() * 2;
+        let newX = block.x - 2 - Math.random() * 2;
         let newY = block.y + (Math.random() - 0.5) * 1;
         
-        // Gentle wave motion
         newY += Math.sin(age / 500) * 0.5;
         
-        // Fade in new blocks
         let newOpacity = block.opacity;
         if (newOpacity < 1) {
           newOpacity = Math.min(1, newOpacity + 0.05);
         }
         
-        // Fade out old blocks
-        if (newX > this.width + 50) {
+        if (newX < -50) {
           newOpacity = Math.max(0, newOpacity - 0.1);
         }
         
-        // Pulse effect for newer blocks
         let scale = block.scale;
         if (age < 1000) {
           scale = 1 + Math.sin(age / 100) * 0.1;
@@ -419,21 +437,44 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
           scale
         };
       })
-      .filter(block => block.x < this.width + 100 && block.opacity > 0);
+      .filter(block => block.x > -100 && block.opacity > 0);
     
-    // Update connections
     this.updateConnections();
-    
-    // Update speed lines
     this.showSpeedLines = this.blocksPerSecond > 1;
+  }
+
+  private spawnBlockFromData(block: BlockSummary): void {
+    const now = Date.now();
+    const visual: BlockVisual = {
+      id: String(block.height),
+      hash: String(block.hash),
+      txCount: Number(block.transactionCount) || 0,
+      timestamp: now,
+      x: this.width + this.blockSize,
+      y: this.height / 2 + (Math.random() - 0.5) * 100,
+      opacity: 0,
+      scale: 0.5
+    };
+    
+    this.displayedBlocks.unshift(visual);
+    this.totalBlocks++;
+    this.totalTransactions += visual.txCount;
+    this.blockTimes.push(now);
+    
+    if (this.blockTimes.length > 10) {
+      this.blockTimes.shift();
+    }
+    this.calculateBps();
   }
 
   private updateConnections(): void {
     this.connections = [];
     
-    for (let i = 0; i < this.displayedBlocks.length - 1; i++) {
-      const block = this.displayedBlocks[i];
-      const nextBlock = this.displayedBlocks[i + 1];
+    const sorted = [...this.displayedBlocks].sort((a, b) => a.x - b.x);
+    
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const block = sorted[i];
+      const nextBlock = sorted[i + 1];
       
       if (Math.abs(block.x - nextBlock.x) < 150 && Math.abs(block.y - nextBlock.y) < 80) {
         this.connections.push({

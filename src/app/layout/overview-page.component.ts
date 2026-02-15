@@ -86,9 +86,10 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
 
       .overview__metrics {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 1rem;
-        min-width: min(520px, 100%);
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+        flex: 1;
+        max-width: 600px;
       }
 
       .metric-card {
@@ -170,8 +171,15 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
         }
 
         .overview__metrics {
+          grid-template-columns: repeat(2, 1fr);
           min-width: 0;
           width: 100%;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .overview__metrics {
+          grid-template-columns: 1fr;
         }
       }
     `

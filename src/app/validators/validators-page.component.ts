@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { combineLatest, Observable } from 'rxjs';
@@ -17,9 +17,20 @@ interface ValidatorInfo {
   readonly stake: number;
 }
 
+interface NodeInfo {
+  nodeId: string;
+  address: string;
+  status: 'online' | 'offline' | 'syncing';
+  height: number;
+  latencyMs: number;
+  version: string;
+  uptimeSeconds: number;
+}
+
 interface ValidatorsViewModel {
   readonly stats: NetworkStatistics;
   readonly validators: readonly ValidatorInfo[];
+  readonly nodes: readonly NodeInfo[];
   readonly totalStaked: number;
   readonly networkHealth: 'healthy' | 'degraded' | 'unhealthy';
   readonly avgBlockTime: number;
@@ -38,8 +49,8 @@ const DEGRADED_TPS_THRESHOLD = 1;
     <section class="validators" *ngIf="viewModel$ | async as vm" aria-labelledby="validators-heading">
       <header class="validators__header">
         <div>
-          <h1 id="validators-heading">Network Health & Validators</h1>
-          <p class="validators__subtitle">Real-time consensus health and validator performance.</p>
+          <h1 id="validators-heading">Network Overview</h1>
+          <p class="validators__subtitle">Real-time network health, validators, and connected peers.</p>
         </div>
         <div class="validators__health" [attr.data-status]="vm.networkHealth">
           <span class="validators__health-dot" aria-hidden="true"></span>
@@ -194,6 +205,46 @@ const DEGRADED_TPS_THRESHOLD = 1;
           <ng-template #noValidators>
             <div class="validator-table__empty">
               <p>No validator data available yet. Waiting for blocks...</p>
+            </div>
+          </ng-template>
+        </div>
+      </section>
+
+      <!-- Connected Peers / Nodes -->
+      <section class="nodes__list" aria-label="Connected peers">
+        <div class="section-heading">
+          <h2>Connected Peers</h2>
+          <p class="muted">{{ vm.nodes.length }} nodes in the network</p>
+        </div>
+
+        <div class="nodes-table" role="table">
+          <div class="nodes-table__header" role="row">
+            <span role="columnheader">Node ID</span>
+            <span role="columnheader">Status</span>
+            <span role="columnheader">Height</span>
+            <span role="columnheader">Latency</span>
+            <span role="columnheader">Uptime</span>
+            <span role="columnheader">Version</span>
+          </div>
+
+          <ng-container *ngIf="vm.nodes.length > 0; else noNodes">
+            <div *ngFor="let node of vm.nodes; trackBy: trackByNode" class="node-row" role="row">
+              <span role="cell" class="node-id">{{ formatNodeId(node.nodeId) }}</span>
+              <span role="cell">
+                <span class="status" [attr.data-status]="node.status">{{ node.status | titlecase }}</span>
+              </span>
+              <span role="cell">{{ node.height | number }}</span>
+              <span role="cell" class="latency" [class.good]="node.latencyMs < 100" [class.warning]="node.latencyMs >= 100 && node.latencyMs < 500" [class.bad]="node.latencyMs >= 500">
+                {{ node.latencyMs }} ms
+              </span>
+              <span role="cell">{{ formatUptime(node.uptimeSeconds) }}</span>
+              <span role="cell" class="version">{{ node.version }}</span>
+            </div>
+          </ng-container>
+
+          <ng-template #noNodes>
+            <div class="validator-table__empty">
+              <p>No peer data available. Network may be starting up.</p>
             </div>
           </ng-template>
         </div>
@@ -560,6 +611,62 @@ const DEGRADED_TPS_THRESHOLD = 1;
         color: var(--text-secondary);
       }
 
+      /* Nodes Table */
+      .nodes-table {
+        display: flex;
+        flex-direction: column;
+        border-radius: 18px;
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        overflow: hidden;
+      }
+
+      .nodes-table__header,
+      .node-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr 1fr 0.8fr;
+        gap: 0.75rem;
+        padding: 0.9rem 1.25rem;
+        align-items: center;
+      }
+
+      .nodes-table__header {
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--panel-border);
+        background: rgba(14, 165, 233, 0.03);
+      }
+
+      .node-row {
+        border-bottom: 1px solid rgba(14, 165, 233, 0.08);
+        transition: all 0.2s ease;
+      }
+
+      .node-row:last-child {
+        border-bottom: none;
+      }
+
+      .node-row:hover {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(20, 184, 166, 0.05));
+      }
+
+      .node-id {
+        font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+        font-size: 0.9rem;
+      }
+
+      .latency.good { color: #22c55e; }
+      .latency.warning { color: #f59e0b; }
+      .latency.bad { color: #ef4444; }
+
+      .version {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+      }
+
       @media (max-width: 960px) {
         .validators__header {
           flex-direction: column;
@@ -596,7 +703,9 @@ const DEGRADED_TPS_THRESHOLD = 1;
   ],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ValidatorsPageComponent {
+export class ValidatorsPageComponent implements OnInit {
+  private nodes: NodeInfo[] = [];
+
   readonly viewModel$: Observable<ValidatorsViewModel> = combineLatest([
     this.data.networkStats$,
     this.data.blocks$
@@ -605,6 +714,24 @@ export class ValidatorsPageComponent {
   );
 
   constructor(private readonly data: ExplorerDataService) {}
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const nodesData = await this.data.fetchNodes();
+      this.nodes = nodesData.map(n => ({
+        nodeId: n.node_id,
+        address: n.address,
+        status: n.status,
+        height: n.height,
+        latencyMs: n.latency_ms,
+        version: n.version,
+        uptimeSeconds: n.uptime_seconds
+      }));
+    } catch (err) {
+      console.warn('Failed to load nodes:', err);
+      this.nodes = [];
+    }
+  }
 
   toNumber(value: PositiveInteger): number {
     return value as number;
@@ -636,6 +763,23 @@ export class ValidatorsPageComponent {
     if (minutes < 60) return `${minutes} min`;
     const hours = Math.floor(minutes / 60);
     return `${hours}h ${minutes % 60}m`;
+  }
+
+  trackByNode(_: number, node: NodeInfo): string {
+    return node.nodeId;
+  }
+
+  formatNodeId(id: string): string {
+    return id.length > 20 ? `${id.slice(0, 12)}…${id.slice(-6)}` : id;
+  }
+
+  formatUptime(seconds: number): string {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    if (days > 0) return `${days}d ${hours}h`;
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
   }
 
   private buildViewModel(stats: NetworkStatistics, blocks: readonly BlockSummary[]): ValidatorsViewModel {
@@ -706,6 +850,7 @@ export class ValidatorsPageComponent {
     return {
       stats,
       validators,
+      nodes: this.nodes,
       totalStaked: 0,
       networkHealth,
       avgBlockTime,

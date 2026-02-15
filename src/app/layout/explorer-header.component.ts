@@ -7,6 +7,11 @@ import { ExplorerDataService } from '@app/services/explorer-data.service';
 import { map } from 'rxjs/operators';
 import { Observable } from 'rxjs';
 
+interface NavGroup {
+  label: string;
+  items: { label: string; route: string }[];
+}
+
 @Component({
   selector: 'explorer-header',
   standalone: true,
@@ -22,20 +27,28 @@ import { Observable } from 'rxjs';
           </div>
         </div>
 
-        <nav class="header__nav" aria-label="Primary">
-          <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }">Blocks</a>
-          <a routerLink="/transactions" routerLinkActive="is-active">Transactions</a>
-          <a routerLink="/accounts" routerLinkActive="is-active">Accounts</a>
-          <a routerLink="/tokens" routerLinkActive="is-active">Tokens</a>
-          <a routerLink="/validators" routerLinkActive="is-active">Validators</a>
-          <a routerLink="/analytics" routerLinkActive="is-active">Analytics</a>
-          <a routerLink="/events" routerLinkActive="is-active">Events</a>
-          <a routerLink="/bridge" routerLinkActive="is-active">Bridge</a>
-          <a routerLink="/chain-params" routerLinkActive="is-active">Params</a>
-          <a routerLink="/nodes" routerLinkActive="is-active">Nodes</a>
-          <a routerLink="/staking" routerLinkActive="is-active">Staking</a>
-          <a routerLink="/privacy" routerLinkActive="is-active">Privacy</a>
-          <a routerLink="/governance" routerLinkActive="is-active">Governance</a>
+        <nav class="header__groups" aria-label="Main navigation">
+          <div *ngFor="let group of navGroups" class="nav-group">
+            <button 
+              class="nav-group__trigger"
+              [class.is-active]="isGroupActive(group)"
+              (click)="toggleGroup(group)"
+            >
+              {{ group.label }}
+              <span class="nav-group__arrow">▾</span>
+            </button>
+            <div class="nav-group__dropdown" *ngIf="openGroup === group">
+              <a 
+                *ngFor="let item of group.items" 
+                [routerLink]="item.route"
+                routerLinkActive="is-active"
+                [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+                (click)="closeGroup()"
+              >
+                {{ item.label }}
+              </a>
+            </div>
+          </div>
         </nav>
 
         <div class="header__tools">
@@ -176,6 +189,99 @@ import { Observable } from 'rxjs';
         font-size: 0.9rem;
       }
 
+      .header__groups {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex: 0 0 auto;
+      }
+
+      .nav-group {
+        position: relative;
+      }
+
+      .nav-group__trigger {
+        appearance: none;
+        background: rgba(14, 165, 233, 0.05);
+        border: 1px solid rgba(14, 165, 233, 0.15);
+        color: var(--text-secondary);
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s ease;
+      }
+
+      .nav-group__trigger:hover {
+        background: rgba(14, 165, 233, 0.1);
+        border-color: rgba(14, 165, 233, 0.3);
+        color: var(--accent);
+      }
+
+      .nav-group__trigger.is-active {
+        background: rgba(14, 165, 233, 0.15);
+        border-color: rgba(14, 165, 233, 0.4);
+        color: var(--accent);
+      }
+
+      .nav-group__arrow {
+        font-size: 0.7rem;
+        transition: transform 0.2s ease;
+      }
+
+      .nav-group__trigger.is-active .nav-group__arrow {
+        transform: rotate(180deg);
+      }
+
+      .nav-group__dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        min-width: 180px;
+        background: rgba(10, 22, 40, 0.95);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        border-radius: 12px;
+        padding: 0.5rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        z-index: 100;
+        animation: dropdown-appear 0.2s ease;
+      }
+
+      @keyframes dropdown-appear {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .nav-group__dropdown a {
+        display: block;
+        padding: 0.6rem 1rem;
+        color: var(--text-secondary);
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        transition: all 0.15s ease;
+      }
+
+      .nav-group__dropdown a:hover {
+        background: rgba(14, 165, 233, 0.1);
+        color: var(--accent);
+      }
+
+      .nav-group__dropdown a.is-active {
+        background: rgba(14, 165, 233, 0.15);
+        color: var(--accent);
+      }
+
       .header__tools {
         display: flex;
         flex-wrap: wrap;
@@ -190,60 +296,6 @@ import { Observable } from 'rxjs';
         flex: 1 1 320px;
         max-width: 360px;
         min-width: 220px;
-      }
-
-      .header__nav {
-        display: flex;
-        gap: 0.75rem;
-        align-items: center;
-        padding: 0.3rem 0.6rem;
-        border-radius: 999px;
-        border: 1px solid rgba(14, 165, 233, 0.15);
-        background: rgba(14, 165, 233, 0.05);
-        backdrop-filter: blur(10px);
-        transition: all 0.3s ease;
-        flex: 0 0 auto;
-      }
-
-      .header__nav:hover {
-        border-color: rgba(14, 165, 233, 0.3);
-        background: rgba(14, 165, 233, 0.08);
-      }
-
-      .header__nav a {
-        color: var(--text-secondary);
-        text-decoration: none;
-        font-size: 0.9rem;
-        padding: 0.45rem 0.85rem;
-        border-radius: 999px;
-        transition: all 0.2s ease;
-        position: relative;
-      }
-
-      .header__nav a::after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 50%;
-        width: 0;
-        height: 2px;
-        background: linear-gradient(90deg, #0ea5e9, #14b8a6);
-        transform: translateX(-50%);
-        transition: width 0.3s ease;
-      }
-
-      .header__nav a:hover {
-        color: var(--accent);
-      }
-
-      .header__nav a:hover::after {
-        width: 70%;
-      }
-
-      .header__nav a.is-active {
-        color: var(--accent);
-        background: rgba(14, 165, 233, 0.15);
-        box-shadow: 0 0 10px rgba(14, 165, 233, 0.2);
       }
 
       .header__actions {
@@ -353,29 +405,9 @@ import { Observable } from 'rxjs';
         }
       }
 
-      @media (max-width: 720px) {
-        .header__inner {
-          flex-direction: column;
-          align-items: stretch;
-        }
-
-        .header__brand {
-          justify-content: center;
-        }
-
-        .header__tools {
-          justify-content: center;
-          width: 100%;
-        }
-
-        .header__nav {
-          justify-content: center;
-          width: 100%;
-        }
-
-        explorer-search {
-          max-width: 100%;
-          flex-basis: 100%;
+      @media (max-width: 900px) {
+        .header__groups {
+          display: none;
         }
       }
     `
@@ -402,7 +434,60 @@ export class ExplorerHeaderComponent {
     })
   );
 
+  navGroups: NavGroup[] = [
+    {
+      label: 'Core',
+      items: [
+        { label: 'Blocks', route: '/' },
+        { label: 'Transactions', route: '/transactions' },
+        { label: 'Accounts', route: '/accounts' },
+        { label: 'Staking', route: '/staking' },
+      ]
+    },
+    {
+      label: 'Network',
+      items: [
+        { label: 'Overview', route: '/network' },
+        { label: 'Analytics', route: '/analytics' },
+        { label: 'Chain Params', route: '/chain-params' },
+        { label: 'Governance', route: '/governance' },
+      ]
+    },
+    {
+      label: 'Tokens',
+      items: [
+        { label: 'Tokens', route: '/tokens' },
+        { label: 'Contracts', route: '/contract/0' },
+        { label: 'Events', route: '/events' },
+      ]
+    },
+    {
+      label: 'Bridge',
+      items: [
+        { label: 'Bridge', route: '/bridge' },
+      ]
+    }
+  ];
+
+  openGroup: NavGroup | null = null;
+
   constructor(private readonly data: ExplorerDataService, private readonly location: Location) {}
+
+  toggleGroup(group: NavGroup): void {
+    this.openGroup = this.openGroup === group ? null : group;
+  }
+
+  closeGroup(): void {
+    this.openGroup = null;
+  }
+
+  isGroupActive(group: NavGroup): boolean {
+    return group.items.some(item => {
+      const path = window.location.pathname;
+      if (item.route === '/') return path === '/';
+      return path.startsWith(item.route);
+    });
+  }
 
   goBack(): void {
     this.location.back();
@@ -412,4 +497,3 @@ export class ExplorerHeaderComponent {
     this.data.refreshNow();
   }
 }
-

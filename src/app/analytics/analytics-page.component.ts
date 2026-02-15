@@ -524,58 +524,31 @@ export class AnalyticsPageComponent implements OnInit {
     this.error = null;
 
     try {
-      const analytics = await this.data.fetchAnalytics().catch(() => null);
+      const analytics = await this.data.fetchAnalytics();
 
-      if (analytics) {
-        this.tpsData = (analytics.tps_history || []).map(p => ({
-          timestamp: this.formatTimestamp(p.timestamp),
-          tps: p.tps
-        }));
+      this.tpsData = (analytics.tps_history || []).map(p => ({
+        timestamp: this.formatTimestamp(p.timestamp),
+        tps: p.tps
+      }));
 
-        this.gasData = (analytics.gas_usage || []).map(p => ({
-          timestamp: this.formatTimestamp(p.timestamp),
-          gasUsed: parseFloat(p.gas_used)
-        }));
+      this.gasData = (analytics.gas_usage || []).map(p => ({
+        timestamp: this.formatTimestamp(p.timestamp),
+        gasUsed: parseFloat(p.gas_used)
+      }));
 
-        this.volumeData = (analytics.tx_volume || []).map(p => ({
-          timestamp: this.formatTimestamp(p.timestamp),
-          volume: parseFloat(p.volume) / 1_000_000
-        }));
+      this.volumeData = (analytics.tx_volume || []).map(p => ({
+        timestamp: this.formatTimestamp(p.timestamp),
+        volume: parseFloat(p.volume) / 1_000_000
+      }));
 
-        this.calculateMetrics();
-      } else {
-        this.generateMockData();
-      }
+      this.calculateMetrics();
 
     } catch (err) {
+      this.error = 'Failed to load analytics data';
       console.error('Analytics load error:', err);
-      this.generateMockData();
     } finally {
       this.loading = false;
     }
-  }
-
-  private generateMockData(): void {
-    const points = 24;
-    const now = Date.now();
-    const hourMs = 3600000;
-
-    this.tpsData = Array.from({ length: points }, (_, i) => ({
-      timestamp: new Date(now - (points - i - 1) * hourMs).toISOString().slice(0, 16),
-      tps: Math.random() * 500 + 100
-    }));
-
-    this.gasData = this.tpsData.map(d => ({
-      timestamp: d.timestamp,
-      gasUsed: Math.random() * 50000000 + 10000000
-    }));
-
-    this.volumeData = this.tpsData.map(d => ({
-      timestamp: d.timestamp,
-      volume: Math.random() * 1000000 + 100000
-    }));
-
-    this.calculateMetrics();
   }
 
   private calculateMetrics(): void {

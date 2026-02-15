@@ -23,6 +23,23 @@ interface BridgeStats {
   supportedChains: string[];
 }
 
+interface PrivacyMetrics {
+  totalShielded: number;
+  totalUnshielded: number;
+  activeShieldedAccounts: number;
+  pendingOperations: number;
+}
+
+interface PrivacyOperation {
+  id: string;
+  type: 'shield' | 'unshield' | 'transfer';
+  sender: string;
+  recipient: string;
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  timestamp: string;
+}
+
 @Component({
   selector: 'bridge-page',
   standalone: true,
@@ -31,8 +48,8 @@ interface BridgeStats {
     <section class="bridge" aria-labelledby="bridge-heading">
       <header class="bridge__header">
         <div>
-          <h1 id="bridge-heading">Cross-chain Bridge</h1>
-          <p class="bridge__subtitle">Bridge transaction history and status</p>
+          <h1 id="bridge-heading">Bridge & Privacy</h1>
+          <p class="bridge__subtitle">Cross-chain transfers and shielded transactions</p>
         </div>
       </header>
 
@@ -40,84 +57,206 @@ interface BridgeStats {
       <div *ngIf="error" class="error">{{ error }}</div>
 
       <ng-container *ngIf="!loading && !error">
-        <section class="bridge__metrics" aria-label="Bridge statistics">
-          <article class="metric-card metric-card--cyan">
-            <h2>Total Deposits</h2>
-            <p class="metric-value">{{ formatCoins(stats.totalDeposits) }}</p>
-            <span class="metric-label">CHERT</span>
-          </article>
+        <!-- Cross-Chain Bridge Section -->
+        <section class="bridge__section" aria-label="Cross-chain bridge">
+          <div class="section-heading">
+            <h2>Cross-Chain Bridge</h2>
+            <p class="muted">Transfer assets between chains</p>
+          </div>
 
-          <article class="metric-card metric-card--teal">
-            <h2>Total Withdraws</h2>
-            <p class="metric-value">{{ formatCoins(stats.totalWithdraws) }}</p>
-            <span class="metric-label">CHERT</span>
-          </article>
+          <section class="bridge__metrics" aria-label="Bridge statistics">
+            <article class="metric-card metric-card--cyan">
+              <h2>Total Deposits</h2>
+              <p class="metric-value">{{ formatCoins(stats.totalDeposits) }}</p>
+              <span class="metric-label">CHERT</span>
+            </article>
 
-          <article class="metric-card metric-card--green">
-            <h2>Active Transfers</h2>
-            <p class="metric-value">{{ stats.activeTransfers }}</p>
-            <span class="metric-label">pending</span>
-          </article>
+            <article class="metric-card metric-card--teal">
+              <h2>Total Withdraws</h2>
+              <p class="metric-value">{{ formatCoins(stats.totalWithdraws) }}</p>
+              <span class="metric-label">CHERT</span>
+            </article>
 
-          <article class="metric-card metric-card--purple">
-            <h2>Supported Chains</h2>
-            <p class="metric-value">{{ stats.supportedChains.length }}</p>
-            <span class="metric-label">networks</span>
-          </article>
+            <article class="metric-card metric-card--green">
+              <h2>Active Transfers</h2>
+              <p class="metric-value">{{ stats.activeTransfers }}</p>
+              <span class="metric-label">pending</span>
+            </article>
+
+            <article class="metric-card metric-card--purple">
+              <h2>Supported Chains</h2>
+              <p class="metric-value">{{ stats.supportedChains.length }}</p>
+              <span class="metric-label">networks</span>
+            </article>
+          </section>
+
+          <section class="bridge__chains" aria-label="Supported chains">
+            <div class="section-heading">
+              <h3>Supported Networks</h3>
+            </div>
+            <div class="chains-list">
+              <div *ngFor="let chain of stats.supportedChains" class="chain-badge">
+                {{ chain }}
+              </div>
+            </div>
+          </section>
+
+          <section class="bridge__transactions" aria-label="Bridge transactions">
+            <div class="section-heading">
+              <h3>Recent Bridge Transactions</h3>
+            </div>
+
+            <div class="bridge-table">
+              <div class="bridge-table__header">
+                <span>Type</span>
+                <span>Route</span>
+                <span>Sender</span>
+                <span>Recipient</span>
+                <span>Amount</span>
+                <span>Status</span>
+                <span>Time</span>
+              </div>
+
+              <div *ngFor="let tx of transactions" class="bridge-row">
+                <span>
+                  <span class="tx-type" [attr.data-type]="tx.type">
+                    {{ tx.type | titlecase }}
+                  </span>
+                </span>
+                <span class="route">
+                  {{ tx.sourceChain }} → {{ tx.destinationChain }}
+                </span>
+                <span class="address">{{ formatAddress(tx.sender) }}</span>
+                <span class="address">{{ formatAddress(tx.recipient) }}</span>
+                <span class="amount">{{ formatCoins(tx.amount) }} CHERT</span>
+                <span>
+                  <span class="status-badge" [attr.data-status]="tx.status">
+                    {{ tx.status | titlecase }}
+                  </span>
+                </span>
+                <span class="time">{{ tx.timestamp }}</span>
+              </div>
+
+              <div *ngIf="transactions.length === 0" class="empty-state">
+                No bridge transactions found
+              </div>
+            </div>
+          </section>
         </section>
 
-        <section class="bridge__chains" aria-label="Supported chains">
+        <!-- Privacy / Shielded Pool Section -->
+        <section class="bridge__section" aria-label="Privacy pool">
           <div class="section-heading">
-            <h2>Supported Networks</h2>
+            <h2>Privacy Pool</h2>
+            <p class="muted">Shielded transactions using zero-knowledge proofs</p>
           </div>
-          <div class="chains-list">
-            <div *ngFor="let chain of stats.supportedChains" class="chain-badge">
-              {{ chain }}
+
+          <section class="bridge__metrics" aria-label="Privacy metrics">
+            <article class="metric-card metric-card--cyan">
+              <h2>Total Shielded</h2>
+              <p class="metric-value">{{ formatCoins(privacyMetrics.totalShielded) }}</p>
+              <span class="metric-label">CHERT</span>
+            </article>
+
+            <article class="metric-card metric-card--teal">
+              <h2>Total Unshielded</h2>
+              <p class="metric-value">{{ formatCoins(privacyMetrics.totalUnshielded) }}</p>
+              <span class="metric-label">CHERT</span>
+            </article>
+
+            <article class="metric-card metric-card--green">
+              <h2>Shielded Accounts</h2>
+              <p class="metric-value">{{ privacyMetrics.activeShieldedAccounts }}</p>
+              <span class="metric-label">addresses</span>
+            </article>
+
+            <article class="metric-card metric-card--purple">
+              <h2>Pending</h2>
+              <p class="metric-value">{{ privacyMetrics.pendingOperations }}</p>
+              <span class="metric-label">operations</span>
+            </article>
+          </section>
+
+          <section class="privacy__info" aria-label="Privacy features">
+            <div class="info-grid">
+              <article class="info-card">
+                <div class="info-card__icon info-card__icon--shield">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                  </svg>
+                </div>
+                <div class="info-card__content">
+                  <h3>Shield</h3>
+                  <p>Convert public tokens to shielded (private) tokens using zero-knowledge proofs.</p>
+                </div>
+              </article>
+
+              <article class="info-card">
+                <div class="info-card__icon info-card__icon--unshield">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </div>
+                <div class="info-card__content">
+                  <h3>Unshield</h3>
+                  <p>Convert shielded tokens back to public tokens with proof of ownership.</p>
+                </div>
+              </article>
+
+              <article class="info-card">
+                <div class="info-card__icon info-card__icon--transfer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M16 8l-4 4-4-4"></path>
+                    <path d="M8 16l4-4 4 4"></path>
+                  </svg>
+                </div>
+                <div class="info-card__content">
+                  <h3>Private Transfer</h3>
+                  <p>Send shielded tokens to other shielded addresses without revealing amounts.</p>
+                </div>
+              </article>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section class="bridge__transactions" aria-label="Bridge transactions">
-          <div class="section-heading">
-            <h2>Recent Bridge Transactions</h2>
-            <p class="muted">Cross-chain transfers</p>
-          </div>
-
-          <div class="bridge-table">
-            <div class="bridge-table__header">
-              <span>Type</span>
-              <span>Route</span>
-              <span>Sender</span>
-              <span>Recipient</span>
-              <span>Amount</span>
-              <span>Status</span>
-              <span>Time</span>
+          <section class="bridge__transactions" aria-label="Privacy operations">
+            <div class="section-heading">
+              <h3>Recent Privacy Operations</h3>
             </div>
 
-            <div *ngFor="let tx of transactions" class="bridge-row">
-              <span>
-                <span class="tx-type" [attr.data-type]="tx.type">
-                  {{ tx.type | titlecase }}
+            <div class="bridge-table">
+              <div class="bridge-table__header">
+                <span>Type</span>
+                <span>From</span>
+                <span>To</span>
+                <span>Amount</span>
+                <span>Status</span>
+                <span>Time</span>
+              </div>
+
+              <div *ngFor="let op of privacyOperations" class="bridge-row">
+                <span>
+                  <span class="tx-type" [attr.data-type]="op.type">
+                    {{ op.type | titlecase }}
+                  </span>
                 </span>
-              </span>
-              <span class="route">
-                {{ tx.sourceChain }} → {{ tx.destinationChain }}
-              </span>
-              <span class="address">{{ formatAddress(tx.sender) }}</span>
-              <span class="address">{{ formatAddress(tx.recipient) }}</span>
-              <span class="amount">{{ formatCoins(tx.amount) }} CHERT</span>
-              <span>
-                <span class="status-badge" [attr.data-status]="tx.status">
-                  {{ tx.status | titlecase }}
+                <span class="address">{{ formatAddress(op.sender) }}</span>
+                <span class="address">{{ formatAddress(op.recipient) }}</span>
+                <span class="amount">{{ formatCoins(op.amount) }} CHERT</span>
+                <span>
+                  <span class="status-badge" [attr.data-status]="op.status">
+                    {{ op.status | titlecase }}
+                  </span>
                 </span>
-              </span>
-              <span class="time">{{ tx.timestamp }}</span>
-            </div>
+                <span class="time">{{ op.timestamp }}</span>
+              </div>
 
-            <div *ngIf="transactions.length === 0" class="empty-state">
-              No bridge transactions found
+              <div *ngIf="privacyOperations.length === 0" class="empty-state">
+                No privacy operations found
+              </div>
             </div>
-          </div>
+          </section>
         </section>
       </ng-container>
     </section>
@@ -334,6 +473,21 @@ interface BridgeStats {
         color: #a855f7;
       }
 
+      .tx-type[data-type="shield"] {
+        background: rgba(14, 165, 233, 0.15);
+        color: #0ea5e9;
+      }
+
+      .tx-type[data-type="unshield"] {
+        background: rgba(20, 184, 166, 0.15);
+        color: #14b8a6;
+      }
+
+      .tx-type[data-type="transfer"] {
+        background: rgba(168, 85, 247, 0.15);
+        color: #a855f7;
+      }
+
       .route {
         font-size: 0.9rem;
         color: var(--text-secondary);
@@ -383,6 +537,81 @@ interface BridgeStats {
         color: var(--text-secondary);
       }
 
+      .bridge__section {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      .bridge__section + .bridge__section {
+        padding-top: 2rem;
+        border-top: 1px solid var(--panel-border);
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+      }
+
+      .info-card {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        padding: 1.25rem;
+        transition: all 0.3s ease;
+      }
+
+      .info-card:hover {
+        border-color: rgba(14, 165, 233, 0.3);
+        transform: translateY(-2px);
+      }
+
+      .info-card__icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+
+      .info-card__icon svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .info-card__icon--shield {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.1));
+        color: #0ea5e9;
+      }
+
+      .info-card__icon--unshield {
+        background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(20, 184, 166, 0.1));
+        color: #14b8a6;
+      }
+
+      .info-card__icon--transfer {
+        background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.1));
+        color: #a855f7;
+      }
+
+      .info-card__content h3 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .info-card__content p {
+        margin: 0.5rem 0 0;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        line-height: 1.5;
+      }
+
       @media (max-width: 960px) {
         .bridge-table__header,
         .bridge-row {
@@ -406,6 +635,13 @@ export class BridgePageComponent implements OnInit {
     activeTransfers: 0,
     supportedChains: []
   };
+  privacyMetrics: PrivacyMetrics = {
+    totalShielded: 0,
+    totalUnshielded: 0,
+    activeShieldedAccounts: 0,
+    pendingOperations: 0
+  };
+  privacyOperations: PrivacyOperation[] = [];
   loading = true;
   error: string | null = null;
 
@@ -420,9 +656,11 @@ export class BridgePageComponent implements OnInit {
     this.error = null;
 
     try {
-      const [transactions, stats] = await Promise.all([
-        this.data.fetchBridgeHistory(50).catch(() => []),
-        this.data.fetchBridgeStats().catch(() => null)
+      const [transactions, stats, privacyInfo, privacyOps] = await Promise.all([
+        this.data.fetchBridgeHistory(50),
+        this.data.fetchBridgeStats(),
+        this.data.fetchPrivacyInfo().catch(() => null),
+        this.data.fetchPrivacyOperations(20).catch(() => [])
       ]);
 
       this.transactions = transactions.map(tx => ({
@@ -438,41 +676,38 @@ export class BridgePageComponent implements OnInit {
         txHash: tx.tx_hash
       }));
 
-      if (stats) {
-        this.stats = {
-          totalDeposits: parseFloat(stats.total_deposits) / 1_000_000,
-          totalWithdraws: parseFloat(stats.total_withdraws) / 1_000_000,
-          activeTransfers: stats.active_transfers,
-          supportedChains: stats.supported_chains
+      this.stats = {
+        totalDeposits: parseFloat(stats.total_deposits) / 1_000_000,
+        totalWithdraws: parseFloat(stats.total_withdraws) / 1_000_000,
+        activeTransfers: stats.active_transfers,
+        supportedChains: stats.supported_chains
+      };
+
+      if (privacyInfo) {
+        this.privacyMetrics = {
+          totalShielded: parseFloat(privacyInfo.total_shielded) / 1_000_000,
+          totalUnshielded: parseFloat(privacyInfo.total_unshielded) / 1_000_000,
+          activeShieldedAccounts: privacyInfo.active_shielded_accounts,
+          pendingOperations: privacyInfo.pending_operations
         };
       }
 
-      if (this.transactions.length === 0) {
-        this.loadMockData();
-      }
+      this.privacyOperations = privacyOps.map(o => ({
+        id: o.id,
+        type: o.type,
+        sender: o.sender,
+        recipient: o.recipient,
+        amount: parseFloat(o.amount) / 1_000_000,
+        status: o.status,
+        timestamp: o.timestamp
+      }));
 
     } catch (err) {
+      this.error = 'Failed to load bridge data';
       console.error('Bridge load error:', err);
-      this.loadMockData();
     } finally {
       this.loading = false;
     }
-  }
-
-  private loadMockData(): void {
-    this.stats = {
-      totalDeposits: 2500000,
-      totalWithdraws: 1800000,
-      activeTransfers: 3,
-      supportedChains: ['Ethereum', 'Polygon', 'Arbitrum', 'Optimism', 'BSC']
-    };
-
-    this.transactions = [
-      { id: '1', type: 'deposit', sourceChain: 'Ethereum', destinationChain: 'Silica', sender: '0x1234...abcd', recipient: 'chert1...wxyz', amount: 50000, status: 'completed', timestamp: '2 hours ago', txHash: '0xabc' },
-      { id: '2', type: 'withdraw', sourceChain: 'Silica', destinationChain: 'Polygon', sender: 'chert1...wxyz', recipient: '0x5678...efgh', amount: 25000, status: 'pending', timestamp: '30 mins ago', txHash: '0xdef' },
-      { id: '3', type: 'deposit', sourceChain: 'Arbitrum', destinationChain: 'Silica', sender: '0xabcd...1234', recipient: 'chert1...yz01', amount: 100000, status: 'completed', timestamp: '5 hours ago', txHash: '0x123' },
-      { id: '4', type: 'withdraw', sourceChain: 'Silica', destinationChain: 'BSC', sender: 'chert1...wxyz', recipient: '0x9876...5432', amount: 75000, status: 'failed', timestamp: '1 day ago', txHash: '0x456' },
-    ];
   }
 
   formatAddress(address: string): string {

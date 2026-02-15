@@ -7,7 +7,6 @@ import { AccountDetailComponent } from '@accounts/account-detail.component';
 import { AccountSearchComponent } from '@accounts/account-search.component';
 import { ValidatorsPageComponent } from '@app/validators/validators-page.component';
 import { StakingPageComponent } from '@app/staking/staking-page.component';
-import { PrivacyPageComponent } from '@app/privacy/privacy-page.component';
 import { GovernancePageComponent } from '@app/governance/governance-page.component';
 import { TokensPageComponent } from '@app/tokens/tokens-page.component';
 import { TokenDetailPageComponent } from '@app/tokens/token-detail.component';
@@ -15,7 +14,6 @@ import { ContractViewerPageComponent } from '@app/contracts/contract-viewer.comp
 import { EventsPageComponent } from '@app/events/events-page.component';
 import { AnalyticsPageComponent } from '@app/analytics/analytics-page.component';
 import { ParamsPageComponent } from '@app/chain/params-page.component';
-import { NodesPageComponent } from '@app/nodes/nodes-page.component';
 import { BridgePageComponent } from '@app/bridge/bridge-page.component';
 
 export const APP_ROUTES: Routes = [
@@ -24,16 +22,12 @@ export const APP_ROUTES: Routes = [
     component: OverviewPageComponent
   },
   {
-    path: 'validators',
+    path: 'network',
     component: ValidatorsPageComponent
   },
   {
     path: 'staking',
     component: StakingPageComponent
-  },
-  {
-    path: 'privacy',
-    component: PrivacyPageComponent
   },
   {
     path: 'governance',
@@ -62,10 +56,6 @@ export const APP_ROUTES: Routes = [
   {
     path: 'chain-params',
     component: ParamsPageComponent
-  },
-  {
-    path: 'nodes',
-    component: NodesPageComponent
   },
   {
     path: 'bridge',
