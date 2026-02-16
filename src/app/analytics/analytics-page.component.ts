@@ -534,12 +534,12 @@ export class AnalyticsPageComponent implements OnInit {
 
       this.gasData = (analytics.gas_usage || []).map(p => ({
         timestamp: this.formatTimestamp(p.timestamp),
-        gasUsed: parseFloat(p.gas_used)
+        gasUsed: p.gas_used
       }));
 
       this.volumeData = (analytics.tx_volume || []).map(p => ({
         timestamp: this.formatTimestamp(p.timestamp),
-        volume: parseFloat(p.volume) / 1_000_000
+        volume: p.volume / 1_000_000
       }));
 
       this.calculateMetrics();
