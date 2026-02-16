@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, RouterModule, Router } from '@angular/router';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 
 interface ContractFunction {
@@ -14,7 +15,7 @@ interface ContractFunction {
 @Component({
   selector: 'contract-viewer-page',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, FormsModule],
   template: `
     <section class="contract" aria-labelledby="contract-heading">
       <header class="contract__header">
@@ -26,16 +27,33 @@ interface ContractFunction {
           </div>
           <div>
             <h1 id="contract-heading">Contract Viewer</h1>
-            <p class="contract-address">{{ address }}</p>
+            <p class="contract-address" *ngIf="address">{{ address }}</p>
           </div>
         </div>
-        <div class="contract-actions">
+        <div class="contract-actions" *ngIf="address">
           <a [routerLink]="['/account', address]" class="btn btn--secondary">View Account</a>
         </div>
       </header>
 
+      <!-- Address Search Form -->
+      <div *ngIf="!address && !loading" class="search-form">
+        <p class="search-instruction">Enter a contract address to view its bytecode, source code, and ABI.</p>
+        <div class="search-input-group">
+          <input 
+            type="text" 
+            [(ngModel)]="searchAddress" 
+            placeholder="Enter contract address (0x...)"
+            class="search-input"
+            (keyup.enter)="searchContract()"
+          />
+          <button class="btn btn--primary" (click)="searchContract()" [disabled]="!searchAddress">
+            View Contract
+          </button>
+        </div>
+      </div>
+
       <div *ngIf="loading" class="loading">Loading contract data...</div>
-      <div *ngIf="error" class="error">{{ error }}</div>
+      <div *ngIf="error && address" class="error">{{ error }}</div>
 
       <ng-container *ngIf="!loading && !error">
         <section class="contract__status" aria-label="Contract status">
@@ -370,12 +388,49 @@ interface ContractFunction {
           grid-template-columns: 1fr;
         }
       }
+
+      .search-form {
+        padding: 2rem;
+        background: rgba(14, 165, 233, 0.03);
+        border: 1px solid rgba(14, 165, 233, 0.1);
+        border-radius: 12px;
+        text-align: center;
+      }
+
+      .search-instruction {
+        margin: 0 0 1.5rem;
+        color: var(--text-secondary);
+      }
+
+      .search-input-group {
+        display: flex;
+        gap: 0.5rem;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .search-input {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+        font-size: 0.9rem;
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.2);
+        color: inherit;
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: #0ea5e9;
+      }
     `
   ],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ContractViewerPageComponent implements OnInit {
   address = '';
+  searchAddress = '';
   bytecode = '';
   sourceCode = '';
   isVerified = false;
@@ -387,17 +442,25 @@ export class ContractViewerPageComponent implements OnInit {
 
   constructor(
     private readonly route: ActivatedRoute,
-    private readonly data: ExplorerDataService
+    private readonly router: Router,
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
   ) {}
 
   async ngOnInit(): Promise<void> {
     const address = this.route.snapshot.paramMap.get('address');
     if (address) {
       this.address = address;
+      this.searchAddress = address;
       await this.loadContract(address);
-    } else {
-      this.error = 'No contract address provided';
-      this.loading = false;
+    }
+    this.cdr.detectChanges();
+  }
+
+  searchContract(): void {
+    const addr = this.searchAddress.trim();
+    if (addr) {
+      this.router.navigate(['/contract', addr]);
     }
   }
 

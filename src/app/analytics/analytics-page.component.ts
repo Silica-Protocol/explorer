@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 
@@ -508,10 +508,14 @@ export class AnalyticsPageComponent implements OnInit {
   loading = true;
   error: string | null = null;
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
+  ) {}
 
   async ngOnInit(): Promise<void> {
     await this.loadAnalytics();
+    this.cdr.detectChanges();
   }
 
   selectRange(range: string): void {
@@ -525,7 +529,7 @@ export class AnalyticsPageComponent implements OnInit {
 
     try {
       const analytics = await this.data.fetchAnalytics();
-      console.log('Analytics data:', analytics);
+      console.log('Analytics loaded:', analytics);
 
       this.tpsData = (analytics.tps_history || []).map(p => ({
         timestamp: this.formatTimestamp(p.timestamp),

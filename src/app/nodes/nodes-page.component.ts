@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 
@@ -401,10 +401,14 @@ export class NodesPageComponent implements OnInit {
     return this.nodes.filter(n => n.status === 'offline').length;
   }
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
+  ) {}
 
   async ngOnInit(): Promise<void> {
     await this.loadNodes();
+    this.cdr.detectChanges();
   }
 
   private async loadNodes(): Promise<void> {

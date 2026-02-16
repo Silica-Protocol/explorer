@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { take } from 'rxjs/operators';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 
 interface StakingMetrics {
@@ -417,10 +418,14 @@ export class StakingPageComponent implements OnInit {
   loading = true;
   error: string | null = null;
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
+  ) {}
 
   async ngOnInit(): Promise<void> {
     await this.loadStakingData();
+    this.cdr.detectChanges();
   }
 
   private async loadStakingData(): Promise<void> {
@@ -428,11 +433,27 @@ export class StakingPageComponent implements OnInit {
     this.error = null;
 
     try {
-      const [stakingInfo, delegations, networkStats] = await Promise.all([
-        this.data.fetchStakingInfo().catch(() => null),
-        this.data.fetchStakingDelegations(10).catch(() => []),
-        this.data.networkStats$.toPromise()
-      ]);
+      console.log('Loading staking data...');
+      
+      const stakingInfo = await this.data.fetchStakingInfo().catch(err => {
+        console.warn('fetchStakingInfo failed:', err);
+        return null;
+      });
+      console.log('stakingInfo:', stakingInfo);
+
+      const delegations = await this.data.fetchStakingDelegations(10).catch(err => {
+        console.warn('fetchStakingDelegations failed:', err);
+        return [];
+      });
+      console.log('delegations:', delegations);
+
+      const networkStats = await this.data.networkStats$.pipe(
+        take(1)
+      ).toPromise().catch(err => {
+        console.warn('networkStats failed:', err);
+        return null;
+      });
+      console.log('networkStats:', networkStats);
 
       if (stakingInfo) {
         this.metrics = {
@@ -458,11 +479,14 @@ export class StakingPageComponent implements OnInit {
         this.metrics.totalValidators = networkStats.activeValidators;
       }
 
+      console.log('Staking data loaded, metrics:', this.metrics);
+
     } catch (err) {
       this.error = 'Failed to load staking data';
       console.error('Staking data load error:', err);
     } finally {
       this.loading = false;
+      console.log('Loading set to false');
     }
   }
 

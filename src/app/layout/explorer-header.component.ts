@@ -49,6 +49,7 @@ interface NavGroup {
               </a>
             </div>
           </div>
+          <a routerLink="/bridge" routerLinkActive="is-active" class="nav-link">Bridge</a>
         </nav>
 
         <div class="header__tools">
@@ -234,6 +235,30 @@ interface NavGroup {
 
       .nav-group__trigger.is-active .nav-group__arrow {
         transform: rotate(180deg);
+      }
+
+      .nav-link {
+        appearance: none;
+        background: rgba(14, 165, 233, 0.05);
+        border: 1px solid rgba(14, 165, 233, 0.15);
+        color: var(--text-secondary);
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        text-decoration: none;
+        transition: all 0.2s ease;
+      }
+
+      .nav-link:hover {
+        background: rgba(14, 165, 233, 0.1);
+        border-color: rgba(14, 165, 233, 0.3);
+        color: var(--accent);
+      }
+
+      .nav-link.is-active {
+        background: rgba(14, 165, 233, 0.15);
+        border-color: rgba(14, 165, 233, 0.4);
+        color: var(--accent);
       }
 
       .nav-group__dropdown {
@@ -459,12 +484,6 @@ export class ExplorerHeaderComponent {
         { label: 'Tokens', route: '/tokens' },
         { label: 'Contracts', route: '/contract/0' },
         { label: 'Events', route: '/events' },
-      ]
-    },
-    {
-      label: 'Bridge',
-      items: [
-        { label: 'Bridge', route: '/bridge' },
       ]
     }
   ];

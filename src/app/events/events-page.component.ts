@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -370,7 +370,8 @@ export class EventsPageComponent implements OnInit {
 
   constructor(
     private readonly route: ActivatedRoute,
-    private readonly data: ExplorerDataService
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -385,6 +386,7 @@ export class EventsPageComponent implements OnInit {
     }
 
     await this.searchEvents();
+    this.cdr.detectChanges();
   }
 
   async searchEvents(): Promise<void> {

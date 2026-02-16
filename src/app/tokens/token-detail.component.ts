@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
@@ -505,7 +505,8 @@ export class TokenDetailPageComponent implements OnInit {
 
   constructor(
     private readonly route: ActivatedRoute,
-    private readonly data: ExplorerDataService
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -516,6 +517,7 @@ export class TokenDetailPageComponent implements OnInit {
       this.error = 'No token address provided';
       this.loading = false;
     }
+    this.cdr.detectChanges();
   }
 
   private async loadToken(address: string): Promise<void> {

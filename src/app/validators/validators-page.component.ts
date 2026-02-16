@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { combineLatest, Observable } from 'rxjs';
@@ -713,7 +713,10 @@ export class ValidatorsPageComponent implements OnInit {
     map(([stats, blocks]) => this.buildViewModel(stats, blocks))
   );
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
+  ) {}
 
   async ngOnInit(): Promise<void> {
     try {
@@ -731,6 +734,7 @@ export class ValidatorsPageComponent implements OnInit {
       console.warn('Failed to load nodes:', err);
       this.nodes = [];
     }
+    this.cdr.detectChanges();
   }
 
   toNumber(value: PositiveInteger): number {

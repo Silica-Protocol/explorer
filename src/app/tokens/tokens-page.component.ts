@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
@@ -341,10 +341,14 @@ export class TokensPageComponent implements OnInit {
   loading = true;
   error: string | null = null;
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
+  ) {}
 
   async ngOnInit(): Promise<void> {
     await this.loadTokens();
+    this.cdr.detectChanges();
   }
 
   private async loadTokens(): Promise<void> {

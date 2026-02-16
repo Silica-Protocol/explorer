@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 
@@ -64,11 +64,11 @@ interface ChainParams {
           <div class="params-grid">
             <div class="param-card">
               <div class="param-label">Min Gas Price</div>
-              <div class="param-value">{{ params.gasPriceMin | number }} wei</div>
+              <div class="param-value">{{ params.gasPriceMin | number }} GRN</div>
             </div>
-            <div class="param-card">
+            <div class="param-row">
               <div class="param-label">Max Gas Price</div>
-              <div class="param-value">{{ params.gasPriceMax | number }} wei</div>
+              <div class="param-value">{{ params.gasPriceMax | number }} GRN</div>
             </div>
           </div>
         </section>
@@ -221,10 +221,14 @@ export class ParamsPageComponent implements OnInit {
   loading = true;
   error: string | null = null;
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(
+    private readonly data: ExplorerDataService,
+    private readonly cdr: ChangeDetectorRef
+  ) {}
 
   async ngOnInit(): Promise<void> {
     await this.loadParams();
+    this.cdr.detectChanges();
   }
 
   private async loadParams(): Promise<void> {
