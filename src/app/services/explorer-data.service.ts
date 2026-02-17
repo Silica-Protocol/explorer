@@ -61,6 +61,8 @@ export class ExplorerDataService implements OnDestroy {
   private readonly accountsSubject = new BehaviorSubject<readonly AccountSummary[]>([]);
   private readonly lastRefreshedAtSubject = new BehaviorSubject<number | null>(null);
   private readonly refreshInFlightSubject = new BehaviorSubject<boolean>(false);
+  private readonly hasMoreBlocksSubject = new BehaviorSubject<boolean>(false);
+  private readonly loadingMoreBlocksSubject = new BehaviorSubject<boolean>(false);
 
   private readonly accounts = new Map<AccountAddress, MutableAccountState>();
   private readonly blockDetails = new Map<Hash, BlockDetails>();
@@ -79,6 +81,8 @@ export class ExplorerDataService implements OnDestroy {
 
   private nodePollInFlight = false;
   private nodeLatestHeight = 0;
+  private nodeBlocksCursor: number | undefined = undefined;
+  private nodeBlocksLoadingMore = false;
 
   constructor(
     @Inject(EXPLORER_DATA_CONFIG) private readonly config: ExplorerDataConfig,
@@ -1118,7 +1122,9 @@ export class ExplorerDataService implements OnDestroy {
 
     try {
       const [result, health] = await Promise.all([
-        this.jsonRpcCall<NodeGetBlocksResult>('get_blocks'),
+        this.jsonRpcCall<NodeGetBlocksResult>('get_blocks', {
+          limit: this.config.blockPageSize
+        }),
         // Best-effort health fetch for network-wide metadata (validator counts, peers, etc).
         // Keep this optional so explorer still works against older nodes/proxies.
         (async () => {
@@ -1133,8 +1139,9 @@ export class ExplorerDataService implements OnDestroy {
       const blocks = [...(result.blocks ?? [])].sort((a, b) => a.block_number - b.block_number);
       const latest = blocks.at(-1)?.block_number ?? 0;
       this.nodeLatestHeight = latest;
+      this.nodeBlocksCursor = result.next_cursor;
 
-      // Reset caches derived from blocks.
+      // Reset caches and replace blocks for fresh load
       this.blockDetails.clear();
       this.transactionDetails.clear();
 
@@ -1156,6 +1163,7 @@ export class ExplorerDataService implements OnDestroy {
 
       const summaries = blockDetails.map((b) => this.toSummary(b));
       this.blocksSubject.next(summaries);
+      this.hasMoreBlocksSubject.next(this.nodeBlocksCursor !== undefined);
 
       // Recent transactions sorted by timestamp desc.
       transactions.sort((a, b) => (b.timestamp as number) - (a.timestamp as number));
@@ -1188,13 +1196,15 @@ export class ExplorerDataService implements OnDestroy {
         if (typeof consensus === 'object' && consensus !== null) {
           const cs = consensus as Record<string, unknown>;
           const vc = cs['validator_count'];
-          if (typeof vc === 'number' && Number.isFinite(vc) && vc >= 0) {
+          if (typeof vc === 'number' && Number.isFinite(vc) && vc > 0) {
             consensusValidatorCount = vc;
           }
         }
       }
+      
+      // If consensus reports a validator count, use that; otherwise count unique validators from blocks
       const activeValidators = this.toPositiveInteger(
-        Math.max(uniqueValidators.size, consensusValidatorCount ?? 0)
+        consensusValidatorCount ?? uniqueValidators.size
       );
 
       this.networkSubject.next({
@@ -1213,6 +1223,74 @@ export class ExplorerDataService implements OnDestroy {
       this.nodePollInFlight = false;
       this.refreshInFlightSubject.next(false);
     }
+  }
+
+  async loadMoreBlocks(): Promise<boolean> {
+    if (this.nodeBlocksLoadingMore || this.nodeBlocksCursor === undefined) {
+      return false;
+    }
+    if (this.backend.mode !== 'node') {
+      return false;
+    }
+
+    this.nodeBlocksLoadingMore = true;
+    this.loadingMoreBlocksSubject.next(true);
+    try {
+      const result = await this.jsonRpcCall<NodeGetBlocksResult>('get_blocks', {
+        from_height: this.nodeBlocksCursor,
+        limit: this.config.blockPageSize
+      });
+
+      if (!result.blocks || result.blocks.length === 0) {
+        this.nodeBlocksCursor = undefined;
+        this.hasMoreBlocksSubject.next(false);
+        return false;
+      }
+
+      const blocks = [...result.blocks].sort((a, b) => a.block_number - b.block_number);
+      this.nodeBlocksCursor = result.next_cursor;
+
+      const blockDetails: BlockDetails[] = [];
+      const transactions: TransactionDetails[] = [];
+
+      for (const block of blocks) {
+        const details = this.nodeToExplorerBlock(block);
+        this.blockDetails.set(details.hash, details);
+        blockDetails.push(details);
+
+        for (const tx of details.transactions) {
+          const txDetail = tx as TransactionDetails;
+          this.transactionDetails.set(txDetail.hash, txDetail);
+          transactions.push(txDetail);
+          this.updateAccountsFromTransaction(txDetail);
+        }
+      }
+
+      const summaries = blockDetails.map((b) => this.toSummary(b));
+      const currentBlocks = this.blocksSubject.getValue();
+      this.blocksSubject.next([...currentBlocks, ...summaries]);
+
+      if (!result.next_cursor) {
+        this.nodeBlocksCursor = undefined;
+      }
+      
+      this.hasMoreBlocksSubject.next(this.nodeBlocksCursor !== undefined);
+      return true;
+    } catch (err) {
+      console.warn('Failed to load more blocks', err);
+      return false;
+    } finally {
+      this.nodeBlocksLoadingMore = false;
+      this.loadingMoreBlocksSubject.next(false);
+    }
+  }
+
+  get hasMoreBlocks$(): Observable<boolean> {
+    return this.hasMoreBlocksSubject.asObservable();
+  }
+
+  get loadingMoreBlocks$(): Observable<boolean> {
+    return this.loadingMoreBlocksSubject.asObservable();
   }
 
   private trimAccountsForRemovedBlock(hash: Hash): void {

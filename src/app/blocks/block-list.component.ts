@@ -18,16 +18,29 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
         <span role="columnheader">Status</span>
         <span role="columnheader">Miner</span>
         <span role="columnheader">Time</span>
+        <span role="columnheader" class="filter-toggle">
+          <label class="filter-toggle__label">
+            <input
+              type="checkbox"
+              [checked]="hideEmptyBlocks"
+              (change)="hideEmptyBlocks = $any($event.target).checked"
+            />
+            <span>Hide empty</span>
+          </label>
+        </span>
       </div>
 
       <ng-container *ngIf="blocks$ | async as blocks">
         <a
-          *ngFor="let block of blocks; trackBy: trackByHash"
+          *ngFor="let block of (hideEmptyBlocks ? blocks.filter(b => b.transactionCount > 0) : blocks); trackBy: trackByHash"
           class="block-row"
           role="row"
           [routerLink]="['/block', block.hash]"
         >
-          <span role="cell">{{ block.height | number }}</span>
+          <span role="cell" class="height">
+            <span class="height__formatted">{{ formatBlockHeight(block.height) }}</span>
+            <span class="height__raw">#{{ block.height | number }}</span>
+          </span>
           <span role="cell" class="hash">{{ formatHash(block.hash) }}</span>
           <span role="cell">{{ block.transactionCount }}</span>
           <span role="cell">
@@ -39,6 +52,16 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
           <span role="cell">{{ formatTime(block.timestamp) }}</span>
         </a>
       </ng-container>
+
+      <div class="load-more" *ngIf="hasMore$ | async">
+        <button
+          class="load-more__button"
+          (click)="loadMore()"
+          [disabled]="loadingMore$ | async"
+        >
+          {{ (loadingMore$ | async) ? 'Loading...' : 'Load More Blocks' }}
+        </button>
+      </div>
     </div>
   `,
   styles: [
@@ -59,7 +82,7 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
       .block-list__header,
       .block-row {
         display: grid;
-        grid-template-columns: 100px 1.6fr 120px 140px 1.2fr 140px;
+        grid-template-columns: 100px 1.6fr 120px 140px 1.2fr 140px 120px;
         gap: 0.5rem;
         padding: 0.9rem 1.2rem;
         align-items: center;
@@ -71,6 +94,29 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
         text-transform: uppercase;
         color: var(--text-secondary);
         border-bottom: 1px solid var(--panel-border);
+      }
+
+      .filter-toggle {
+        justify-self: end;
+      }
+
+      .filter-toggle__label {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        cursor: pointer;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-secondary);
+        user-select: none;
+      }
+
+      .filter-toggle__label input {
+        width: 14px;
+        height: 14px;
+        accent-color: var(--accent);
+        cursor: pointer;
       }
 
       .block-row {
@@ -94,6 +140,27 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
       .hash {
         font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
         font-size: 0.9rem;
+      }
+
+      .height {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.3;
+      }
+
+      .height__formatted {
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: 0.02em;
+      }
+
+      .height__raw {
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.7rem;
+        color: var(--text-secondary);
+        opacity: 0.7;
       }
 
       .miner {
@@ -121,17 +188,48 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
         box-shadow: 0 0 10px rgba(34, 197, 94, 0.15);
       }
 
+      .load-more {
+        display: flex;
+        justify-content: center;
+        padding: 1.5rem;
+        border-top: 1px solid var(--panel-border);
+      }
+
+      .load-more__button {
+        padding: 0.75rem 2rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-primary);
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .load-more__button:hover:not(:disabled) {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+
+      .load-more__button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
       @media (max-width: 960px) {
         .block-list__header,
         .block-row {
-          grid-template-columns: 1fr 1.6fr 1fr;
+          grid-template-columns: 1fr 1.6fr 1fr 80px;
         }
 
-        .block-list__header span:nth-child(n + 4) {
+        .block-list__header span:nth-child(n + 4),
+        .block-row span:nth-child(n + 4) {
           display: none;
         }
 
-        .block-row span:nth-child(n + 4) {
+        .filter-toggle {
           display: none;
         }
       }
@@ -141,8 +239,15 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
 })
 export class BlockListComponent {
   readonly blocks$: Observable<readonly BlockSummary[]> = this.data.blocks$;
+  readonly hasMore$ = this.data.hasMoreBlocks$;
+  readonly loadingMore$ = this.data.loadingMoreBlocks$;
+  hideEmptyBlocks = false;
 
   constructor(private readonly data: ExplorerDataService) {}
+
+  async loadMore(): Promise<void> {
+    await this.data.loadMoreBlocks();
+  }
 
   trackByHash(_: number, block: BlockSummary): Hash {
     return block.hash;
@@ -151,6 +256,26 @@ export class BlockListComponent {
   formatHash(hash: Hash): string {
     const value = hash as string;
     return `${value.slice(0, 6)}…${value.slice(-4)}`;
+  }
+
+  formatBlockHeight(height: bigint): string {
+    const h = Number(height);
+    const epochSize = 32768; // 32^3
+    const major = Math.floor(h / epochSize);
+    const minor = h % epochSize;
+
+    const base32Chars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+    const idx2 = minor % 32;
+    const minor1 = Math.floor(minor / 32);
+    const idx1 = minor1 % 32;
+    const idx0 = Math.floor(minor1 / 32);
+
+    const minorStr = base32Chars[idx0] + base32Chars[idx1] + base32Chars[idx2];
+
+    const majorStr = major.toString().padStart(9, '0').replace(/(\d{3})(?=\d)/g, '$1-');
+
+    return `${majorStr}.${minorStr}`;
   }
 
   formatMiner(miner: string): string {

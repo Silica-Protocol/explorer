@@ -7,6 +7,7 @@ export interface ExplorerDataConfig {
   readonly finalityLag: number;
   readonly autoStart: boolean;
   readonly maxBlocks: number;
+  readonly blockPageSize: number;
   readonly accountCount: number;
   readonly txPerBlockMin: number;
   readonly txPerBlockMax: number;
@@ -21,6 +22,7 @@ const DEFAULT_CONFIG: ExplorerDataConfig = {
   finalityLag: 12,
   autoStart: true,
   maxBlocks: 1024,
+  blockPageSize: 50,
   accountCount: 320,
   txPerBlockMin: 6,
   txPerBlockMax: 42

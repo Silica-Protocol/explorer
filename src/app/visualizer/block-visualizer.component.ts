@@ -323,6 +323,7 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
   private blockTimes: number[] = [];
   private currentY = 0;
   private lastBlockTime = 0;
+  private latestBlocks: readonly BlockSummary[] = [];
 
   constructor(private readonly data: ExplorerDataService) {}
 
@@ -341,6 +342,7 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
 
   private startVisualization(): void {
     this.data.blocks$.pipe(takeUntil(this.destroy$)).subscribe(blocks => {
+      this.latestBlocks = blocks;
       if (blocks && blocks.length > 0) {
         const recentBlocks = blocks.slice(-20).reverse();
         this.displayedBlocks = recentBlocks.map((block, i) => ({
@@ -393,18 +395,17 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
 
   private update(): void {
     const now = Date.now();
+    const blocks = this.latestBlocks;
     
-    this.data.blocks$.pipe(takeUntil(this.destroy$)).subscribe(blocks => {
-      if (blocks && blocks.length > 0) {
-        const latestBlock = blocks[blocks.length - 1];
-        const latestBlockNum = Number(latestBlock.height);
-        
-        const existingIds = new Set(this.displayedBlocks.map(b => b.id));
-        if (!existingIds.has(String(latestBlockNum))) {
-          this.spawnBlockFromData(latestBlock);
-        }
+    if (blocks && blocks.length > 0) {
+      const latestBlock = blocks[blocks.length - 1];
+      const latestBlockNum = Number(latestBlock.height);
+      
+      const existingIds = new Set(this.displayedBlocks.map(b => b.id));
+      if (!existingIds.has(String(latestBlockNum))) {
+        this.spawnBlockFromData(latestBlock);
       }
-    });
+    }
     
     this.displayedBlocks = this.displayedBlocks
       .map(block => {
