@@ -31,8 +31,9 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
       </div>
 
       <ng-container *ngIf="blocks$ | async as blocks">
-        <a
-          *ngFor="let block of (hideEmptyBlocks ? blocks.filter(b => b.transactionCount > 0) : blocks); trackBy: trackByHash"
+        <ng-container *ngIf="getFilteredBlocks(blocks) as filteredBlocks">
+          <a
+            *ngFor="let block of filteredBlocks; trackBy: trackByHash"
           class="block-row"
           role="row"
           [routerLink]="['/block', block.hash]"
@@ -50,7 +51,8 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
           </span>
           <span role="cell" class="miner">{{ formatMiner(block.miner) }}</span>
           <span role="cell">{{ formatTime(block.timestamp) }}</span>
-        </a>
+          </a>
+        </ng-container>
       </ng-container>
 
       <div class="load-more" *ngIf="hasMore$ | async">
@@ -253,12 +255,17 @@ export class BlockListComponent {
     return block.hash;
   }
 
+  getFilteredBlocks(blocks: readonly BlockSummary[] | null): readonly BlockSummary[] {
+    if (!blocks) return [];
+    return this.hideEmptyBlocks ? blocks.filter(b => b.transactionCount > 0) : blocks;
+  }
+
   formatHash(hash: Hash): string {
     const value = hash as string;
     return `${value.slice(0, 6)}…${value.slice(-4)}`;
   }
 
-  formatBlockHeight(height: bigint): string {
+  formatBlockHeight(height: number): string {
     const h = Number(height);
     const epochSize = 32768; // 32^3
     const major = Math.floor(h / epochSize);
