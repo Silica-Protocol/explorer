@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, ViewChild } 
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { BehaviorSubject, Observable, combineLatest } from 'rxjs';
-import { debounceTime, distinctUntilChanged, map, shareReplay, startWith } from 'rxjs/operators';
+import { BehaviorSubject, Observable, combineLatest, from } from 'rxjs';
+import { debounceTime, distinctUntilChanged, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import type { BlockSummary } from '@shared/models/block.model';
 import type { AccountSummary } from '@shared/models/account.model';
@@ -230,11 +230,62 @@ export class ExplorerSearchComponent implements OnDestroy {
     this.data.recentTransactions$,
     this.data.accounts$
   ]).pipe(
-    map(([term, blocks, transactions, accounts]) =>
-      this.computeSearchResults(term, blocks, transactions, accounts)
-    ),
+    switchMap(([term, blocks, transactions, accounts]) => {
+      const localResults = this.computeSearchResults(term, blocks, transactions, accounts);
+      if (localResults.length >= MAX_RESULTS || term.length < MIN_TERM_LENGTH) {
+        return from(Promise.resolve(localResults));
+      }
+      return from(this.searchFromNode(term, localResults));
+    }),
     shareReplay({ bufferSize: 1, refCount: true })
   );
+
+  private async searchFromNode(term: string, localResults: SearchResultItem[]): Promise<SearchResultItem[]> {
+    const results = [...localResults];
+
+    try {
+      const [nodeBlocks, nodeTxs] = await Promise.all([
+        this.data.searchBlocks(term, MAX_RESULTS - results.length),
+        this.data.searchTransactions(term, MAX_RESULTS - results.length)
+      ]);
+
+      for (const block of nodeBlocks) {
+        if (results.length >= MAX_RESULTS) break;
+        const existing = results.find(r => r.type === 'block' && r.id === block.hash);
+        if (!existing) {
+          results.push({
+            type: 'block',
+            id: block.hash,
+            title: `Block #${Number(block.height).toLocaleString()}`,
+            subtitle: `${block.hash.slice(0, 20)}…`,
+            score: 5,
+            route: ['/block', block.hash] as const,
+            highlight: block.hash
+          });
+        }
+      }
+
+      for (const tx of nodeTxs) {
+        if (results.length >= MAX_RESULTS) break;
+        const existing = results.find(r => r.type === 'transaction' && r.id === tx.hash);
+        if (!existing) {
+          results.push({
+            type: 'transaction',
+            id: tx.hash,
+            title: `Transaction ${tx.hash.slice(0, 16)}…`,
+            subtitle: `${tx.hash.slice(0, 10)}… → ${tx.hash.slice(0, 10)}…`,
+            score: 5,
+            route: ['/transaction', tx.hash] as const,
+            highlight: tx.hash
+          });
+        }
+      }
+    } catch {
+      // Ignore node search errors, return local results
+    }
+
+    return results;
+  }
 
   readonly viewModel$: Observable<SearchViewModel> = combineLatest([
     this.term$,

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
@@ -284,7 +284,7 @@ export class AccountSearchComponent {
   error: string | null = null;
   state: AccountLookupState | null = null;
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(private readonly data: ExplorerDataService, private readonly cdr: ChangeDetectorRef) {}
 
   async onSubmit(event: Event): Promise<void> {
     event.preventDefault();
@@ -308,6 +308,7 @@ export class AccountSearchComponent {
   private async loadAddress(address: string, reset: boolean, cursor?: string | null): Promise<void> {
     this.loading = true;
     this.error = null;
+    this.cdr.detectChanges();
 
     try {
       const [balance, history] = await Promise.all([
@@ -332,6 +333,7 @@ export class AccountSearchComponent {
       this.error = err instanceof Error ? err.message : 'Failed to fetch account.';
     } finally {
       this.loading = false;
+      this.cdr.detectChanges();
     }
   }
 

@@ -14,11 +14,11 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
       <div class="block-list__header" role="row">
         <span role="columnheader">Height</span>
         <span role="columnheader">Hash</span>
-        <span role="columnheader">Transactions</span>
+        <span role="columnheader">Txs</span>
         <span role="columnheader">Status</span>
-        <span role="columnheader">Miner</span>
+        <span role="columnheader">Validator</span>
         <span role="columnheader">Time</span>
-        <span role="columnheader" class="filter-toggle">
+        <span class="filter-toggle">
           <label class="filter-toggle__label">
             <input
               type="checkbox"
@@ -49,7 +49,7 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
               {{ block.status === 'finalized' ? 'Finalized' : 'Pending' }}
             </span>
           </span>
-          <span role="cell" class="miner">{{ formatMiner(block.miner) }}</span>
+          <span role="cell" class="validator">{{ formatValidator(block.miner) }}</span>
           <span role="cell">{{ formatTime(block.timestamp) }}</span>
           </a>
         </ng-container>
@@ -84,7 +84,7 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
       .block-list__header,
       .block-row {
         display: grid;
-        grid-template-columns: 100px 1.6fr 120px 140px 1.2fr 140px 120px;
+        grid-template-columns: 130px 1.4fr 60px 100px 1fr 100px;
         gap: 0.5rem;
         padding: 0.9rem 1.2rem;
         align-items: center;
@@ -165,15 +165,15 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
         opacity: 0.7;
       }
 
-      .miner {
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      .validator {
+        min-width: 0;
       }
 
       .status {
         display: inline-flex;
+        justify-content: center;
         align-items: center;
+        width: 100%;
         gap: 0.25rem;
         padding: 0.12rem 0.6rem;
         border-radius: 999px;
@@ -181,6 +181,7 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
         font-size: 0.78rem;
         text-transform: capitalize;
         color: var(--accent);
+        box-sizing: border-box;
       }
 
       .status--finalized {
@@ -262,7 +263,7 @@ export class BlockListComponent {
 
   formatHash(hash: Hash): string {
     const value = hash as string;
-    return `${value.slice(0, 6)}…${value.slice(-4)}`;
+    return `${value.slice(0, 10)}…${value.slice(-6)}`;
   }
 
   formatBlockHeight(height: number): string {
@@ -285,13 +286,16 @@ export class BlockListComponent {
     return `${majorStr}.${minorStr}`;
   }
 
-  formatMiner(miner: string): string {
-    return miner.length > 16 ? `${miner.slice(0, 16)}…` : miner;
+  formatValidator(validator: string): string {
+    return validator;
   }
 
   formatTime(timestamp: UnixMs): string {
     const difference = Date.now() - (timestamp as number);
     const seconds = Math.floor(difference / 1000);
+    if (seconds < 0) {
+      return 'now';
+    }
     if (seconds < 60) {
       return `${seconds}s ago`;
     }

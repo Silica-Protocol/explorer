@@ -13,6 +13,7 @@ import type {
   Address as NodeAddress,
   GetTransactionResult as NodeGetTransactionResult,
   TransactionHistoryResult as NodeTransactionHistoryResult,
+  TransactionHistoryEntry as NodeTransactionHistoryEntry,
   Transaction as NodeTransaction,
   JsonRpcRequest,
   JsonRpcResponse
@@ -173,14 +174,178 @@ export class ExplorerDataService implements OnDestroy {
     limit: number = 50,
     cursor: string | null = null
   ): Promise<NodeTransactionHistoryResult> {
-    const trimmed = address.trim();
-    assert(trimmed.length > 0, 'Address must not be empty');
-    assert(Number.isFinite(limit) && limit > 0, 'History limit must be positive');
-    const params: Record<string, unknown> = { address: trimmed, limit };
+    const params: Record<string, unknown> = { limit };
+    if (address) {
+      params['address'] = address.trim();
+    }
     if (cursor) {
       params['cursor'] = cursor;
     }
     return await this.jsonRpcCall<NodeTransactionHistoryResult>('get_transaction_history', params);
+  }
+
+  async fetchTransactionByHashFromNode(txHash: string): Promise<TransactionDetails | null> {
+    const trimmed = txHash.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    try {
+      console.log('Fetching tx:', trimmed);
+      
+      const txResult = await this.fetchTransactionByHash(trimmed);
+      console.log('Got tx result:', txResult);
+      
+      if (txResult && txResult.status !== 'not_found') {
+        const extended = txResult as unknown as Record<string, unknown>;
+        return {
+          hash: txResult.tx_id as Hash,
+          blockHash: (extended['block_hash'] as Hash) || ('' as Hash),
+          blockHeight: this.toPositiveInteger((extended['block_number'] as number) || 0),
+          from: txResult.sender as unknown as AccountAddress,
+          to: txResult.recipient as unknown as AccountAddress,
+          value: this.toAttoValue(txResult.amount ?? 0),
+          fee: this.toAttoValue(txResult.fee ?? 0),
+          timestamp: txResult.timestamp as unknown as UnixMs,
+          status: txResult.status as unknown as import('@silica-protocol/explorer-models').TransactionStatus,
+          inputs: [],
+          outputs: [],
+          confirmations: 0
+        };
+      }
+
+      console.log('Tx not found');
+      return null;
+    } catch (e) {
+      console.error('Error fetching tx:', e);
+      return null;
+    }
+  }
+
+  async searchBlocks(query: string, limit: number = 10): Promise<readonly BlockSummary[]> {
+    const trimmed = query.trim();
+    if (trimmed.length === 0) {
+      return [];
+    }
+
+    const numericQuery = /^\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : null;
+
+    try {
+      if (numericQuery !== null) {
+        const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByNumber', { block_number: numericQuery, include_txs: true });
+        if (result) {
+          return this.convertBlocksToSummaries([result]);
+        }
+        return [];
+      }
+
+      const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByHash', { block_hash: trimmed, include_txs: true });
+      if (result) {
+        return this.convertBlocksToSummaries([result]);
+      }
+
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  async searchTransactions(query: string, limit: number = 10): Promise<readonly TransactionDetails[]> {
+    const trimmed = query.trim();
+    if (trimmed.length === 0) {
+      return [];
+    }
+
+    try {
+      const result = await this.fetchTransactionByHash(trimmed);
+      if (result && result.status !== 'not_found') {
+        const extended = result as unknown as Record<string, unknown>;
+        const tx: TransactionDetails = {
+          hash: result.tx_id as Hash,
+          blockHash: (extended['block_hash'] as Hash) || ('' as Hash),
+          blockHeight: this.toPositiveInteger((extended['block_number'] as number) || 0),
+          from: result.sender as unknown as AccountAddress,
+          to: result.recipient as unknown as AccountAddress,
+          value: this.toAttoValue(result.amount ?? 0),
+          fee: this.toAttoValue(result.fee ?? 0),
+          timestamp: result.timestamp as unknown as UnixMs,
+          status: result.status as unknown as import('@silica-protocol/explorer-models').TransactionStatus,
+          inputs: [],
+          outputs: [],
+          confirmations: 0
+        };
+        return [tx];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  async fetchBlockByHash(blockHash: string): Promise<BlockDetails | null> {
+    const trimmed = blockHash.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    try {
+      const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByHash', { block_hash: trimmed, include_txs: true });
+      if (result) {
+        return this.nodeToExplorerBlock(result);
+      }
+      return null;
+    } catch (e) {
+      console.error('Error fetching block:', e);
+      return null;
+    }
+  }
+
+  async fetchBlockByNumber(blockNumber: number): Promise<BlockDetails | null> {
+    try {
+      const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByNumber', { block_number: blockNumber, include_txs: true });
+      if (result) {
+        return this.nodeToExplorerBlock(result);
+      }
+      return null;
+    } catch (e) {
+      console.error('Error fetching block:', e);
+      return null;
+    }
+  }
+
+  private convertBlocksToSummaries(blocks: readonly NodeBlock[]): BlockSummary[] {
+    return blocks.map(block => {
+      const height = this.toPositiveInteger(block.block_number);
+      return {
+        height,
+        hash: block.block_hash as Hash,
+        parentHash: block.previous_block_hash as Hash | null,
+        timestamp: this.toUnixMsFromRfc3339(block.timestamp),
+        transactionCount: block.transactions.length,
+        totalValue: this.toAttoValue(0) as AttoValue,
+        status: 'pending' as const,
+        confirmationScore: 0,
+        miner: this.nodeAddressToAccountAddress(block.validator_address, 'validator'),
+        delegateSet: []
+      };
+    });
+  }
+
+  private convertTxToDetails(tx: NodeTransactionHistoryEntry): TransactionDetails {
+    return {
+      hash: tx.tx_id as Hash,
+      blockHash: tx.block_hash as Hash,
+      blockHeight: this.toPositiveInteger(tx.block_number),
+      from: tx.sender as unknown as import('@silica-protocol/explorer-models').AccountAddress,
+      to: tx.recipient as unknown as import('@silica-protocol/explorer-models').AccountAddress,
+      value: this.toAttoValue(tx.amount),
+      fee: this.toAttoValue(tx.fee),
+      timestamp: tx.timestamp as unknown as import('@silica-protocol/explorer-models').UnixMs,
+      status: tx.status as unknown as import('@silica-protocol/explorer-models').TransactionStatus,
+      inputs: [],
+      outputs: [],
+      confirmations: 0
+    };
   }
 
   async fetchBalance(address: string): Promise<{ address: string; balance: string; nonce: number }> {
@@ -673,7 +838,7 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   private pushBlock(block: BlockSummary): void {
-    const blocks = [...this.blocksSubject.getValue(), block];
+    const blocks = [block, ...this.blocksSubject.getValue()];
 
     if (blocks.length > this.config.maxBlocks) {
       const excess = blocks.length - this.config.maxBlocks;
@@ -698,6 +863,14 @@ export class ExplorerDataService implements OnDestroy {
 
   private updateFinality(currentHeight: PositiveInteger): void {
     const finalizedThreshold = Math.max(0, (currentHeight as number) - this.config.finalityLag);
+    this.applyFinality(finalizedThreshold);
+  }
+
+  private updateFinalityFromHeight(finalizedThreshold: PositiveInteger): void {
+    this.applyFinality(finalizedThreshold as number);
+  }
+
+  private applyFinality(finalizedThreshold: number): void {
     const updated = this.blocksSubject.getValue().map((block: BlockSummary) => {
       let nextStatus = block.status;
       if ((block.height as number) <= finalizedThreshold) {
@@ -1141,17 +1314,23 @@ export class ExplorerDataService implements OnDestroy {
       this.nodeLatestHeight = latest;
       this.nodeBlocksCursor = result.next_cursor;
 
-      // Reset caches and replace blocks for fresh load
-      this.blockDetails.clear();
-      this.transactionDetails.clear();
+      // If this is a refresh (not initial load), merge new blocks with existing ones
+      // to preserve any previously loaded older blocks from "load more"
+      const existingBlocks = this.blocksSubject.getValue();
+      const existingHeights = new Set(existingBlocks.map(b => b.height));
 
-      const blockDetails: BlockDetails[] = [];
+      const newBlockDetails: BlockDetails[] = [];
       const transactions: TransactionDetails[] = [];
 
       for (const block of blocks) {
+        const blockHeight = this.toPositiveInteger(block.block_number);
+        // Skip blocks we already have (from previous loads)
+        if (existingHeights.has(blockHeight)) {
+          continue;
+        }
         const details = this.nodeToExplorerBlock(block);
         this.blockDetails.set(details.hash, details);
-        blockDetails.push(details);
+        newBlockDetails.push(details);
 
         for (const tx of details.transactions) {
           const txDetail = tx as TransactionDetails;
@@ -1161,9 +1340,16 @@ export class ExplorerDataService implements OnDestroy {
         }
       }
 
-      const summaries = blockDetails.map((b) => this.toSummary(b));
-      this.blocksSubject.next(summaries);
+      // Combine: new blocks (prepended) + existing blocks
+      const newSummaries = newBlockDetails.map(b => this.toSummary(b));
+      const mergedBlocks = [...newSummaries, ...existingBlocks].sort((a, b) => (b.height as number) - (a.height as number));
+
+      this.blocksSubject.next(mergedBlocks);
       this.hasMoreBlocksSubject.next(this.nodeBlocksCursor !== undefined);
+
+      // Update finality status for all blocks
+      const finalizedHeight = this.toPositiveInteger(Math.max(0, latest - this.config.finalityLag));
+      this.updateFinalityFromHeight(finalizedHeight);
 
       // Recent transactions sorted by timestamp desc.
       transactions.sort((a, b) => (b.timestamp as number) - (a.timestamp as number));
@@ -1173,7 +1359,6 @@ export class ExplorerDataService implements OnDestroy {
 
       // Network stats (UI-level approximation)
       const now = Date.now();
-      const finalizedHeight = this.toPositiveInteger(Math.max(0, latest - this.config.finalityLag));
       const currentHeight = this.toPositiveInteger(latest);
 
       let averageTps = 0;

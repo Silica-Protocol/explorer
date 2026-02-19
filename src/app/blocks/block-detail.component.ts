@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, ParamMap, RouterModule } from '@angular/router';
 import { map, switchMap } from 'rxjs/operators';
@@ -15,77 +15,84 @@ type BlockHash = BlockDetails['hash'];
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <ng-container *ngIf="viewModel$ | async as vm; else loading">
-      <section class="block-detail" *ngIf="vm.block; else notFound" aria-labelledby="block-heading">
-        <header class="block-detail__header">
-          <div>
-            <p class="block-detail__label">Block</p>
-            <h1 id="block-heading">{{ vm.block.height | number }}</h1>
-            <p class="block-detail__hash">{{ vm.block.hash }}</p>
-          </div>
-          <div class="block-detail__status" [class.block-detail__status--finalized]="vm.block.status === 'finalized'">
-            {{ vm.block.status | titlecase }}
-          </div>
-        </header>
-
-        <section class="block-detail__overview" aria-label="Block metrics">
-          <article>
-            <h2>Timestamp</h2>
-            <p>{{ vm.block.timestamp | date: 'medium' }}</p>
-          </article>
-          <article>
-            <h2>Parent</h2>
-            <p *ngIf="vm.block.parentHash; else noParent">{{ vm.block.parentHash }}</p>
-            <ng-template #noParent><span class="muted">Genesis</span></ng-template>
-          </article>
-          <article>
-            <h2>Transactions</h2>
-            <p>{{ vm.block.transactionCount }}</p>
-          </article>
-          <article>
-            <h2>Total Value</h2>
-            <p>{{ formatCoins(vm.block.totalValue) }} CHRT</p>
-          </article>
-          <article>
-            <h2>Miner</h2>
-            <p>{{ vm.block.miner }}</p>
-          </article>
-          <article>
-            <h2>Confirmation Score</h2>
-            <p>{{ vm.block.confirmationScore }}</p>
-          </article>
+    <ng-container *ngIf="viewModel$ | async as vm">
+      <ng-container *ngIf="vm.loading; else content">
+        <section class="empty-state" aria-live="polite">
+          <p>Loading block data…</p>
         </section>
+      </ng-container>
+      <ng-template #content>
+        <section class="block-detail" *ngIf="vm.block; else notFound" aria-labelledby="block-heading">
+          <header class="block-detail__header">
+            <div>
+              <p class="block-detail__label">Block</p>
+              <h1 id="block-heading">{{ vm.block.height | number }}</h1>
+              <p class="block-detail__hash">{{ vm.block.hash }}</p>
+            </div>
+            <div class="block-detail__status" [class.block-detail__status--finalized]="vm.block.status === 'finalized'">
+              {{ vm.block.status | titlecase }}
+            </div>
+          </header>
 
-        <section aria-label="Transactions" class="transactions">
-          <div class="section-heading">
-            <h2>Transactions</h2>
-            <p class="muted">{{ vm.transactions.length }} entries</p>
-          </div>
+          <section class="block-detail__overview" aria-label="Block metrics">
+            <article>
+              <h2>Timestamp</h2>
+              <p>{{ vm.block.timestamp | date: 'medium' }}</p>
+            </article>
+            <article>
+              <h2>Parent</h2>
+              <p *ngIf="vm.block.parentHash; else noParent">{{ vm.block.parentHash }}</p>
+              <ng-template #noParent><span class="muted">Genesis</span></ng-template>
+            </article>
+            <article>
+              <h2>Transactions</h2>
+              <p>{{ vm.block.transactionCount }}</p>
+            </article>
+            <article>
+              <h2>Total Value</h2>
+              <p>{{ formatCoins(vm.block.totalValue) }} CHRT</p>
+            </article>
+            <article>
+              <h2>Validator</h2>
+              <p>{{ vm.block.miner }}</p>
+            </article>
+            <article>
+              <h2>Confirmation Score</h2>
+              <p>{{ vm.block.confirmationScore }}</p>
+            </article>
+          </section>
 
-          <div class="transaction-table" role="table">
-            <div class="transaction-table__header" role="row">
-              <span role="columnheader">Hash</span>
-              <span role="columnheader">From</span>
-              <span role="columnheader">To</span>
-              <span role="columnheader">Value</span>
-              <span role="columnheader">Fee</span>
+          <section aria-label="Transactions" class="transactions">
+            <div class="section-heading">
+              <h2>Transactions</h2>
+              <p class="muted">{{ vm.transactions.length }} entries</p>
             </div>
 
-            <a
-              *ngFor="let tx of vm.transactions; trackBy: trackByHash"
-              class="transaction-row"
-              role="row"
-              [routerLink]="['/transaction', tx.hash]"
-            >
-              <span role="cell" class="hash">{{ formatHash(tx.hash) }}</span>
-              <span role="cell">{{ formatHash(tx.from) }}</span>
-              <span role="cell">{{ formatHash(tx.to) }}</span>
-              <span role="cell">{{ formatCoins(tx.value) }} CHRT</span>
-              <span role="cell">{{ formatCoins(tx.fee) }} CHRT</span>
-            </a>
-          </div>
+            <div class="transaction-table" role="table">
+              <div class="transaction-table__header" role="row">
+                <span role="columnheader">Hash</span>
+                <span role="columnheader">From</span>
+                <span role="columnheader">To</span>
+                <span role="columnheader">Value</span>
+                <span role="columnheader">Fee</span>
+              </div>
+
+              <a
+                *ngFor="let tx of vm.transactions; trackBy: trackByHash"
+                class="transaction-row"
+                role="row"
+                [routerLink]="['/transaction', tx.hash]"
+              >
+                <span role="cell" class="hash">{{ formatHash(tx.hash) }}</span>
+                <span role="cell">{{ formatHash(tx.from) }}</span>
+                <span role="cell">{{ formatHash(tx.to) }}</span>
+                <span role="cell">{{ formatCoins(tx.value) }} CHRT</span>
+                <span role="cell">{{ formatCoins(tx.fee) }} CHRT</span>
+              </a>
+            </div>
+          </section>
         </section>
-      </section>
+      </ng-template>
     </ng-container>
 
     <ng-template #notFound>
@@ -294,15 +301,53 @@ type BlockHash = BlockDetails['hash'];
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BlockDetailComponent {
-  readonly viewModel$: Observable<{ block: BlockDetails | undefined; transactions: readonly TransactionSummary[] }> =
+  block: BlockDetails | undefined;
+  transactions: readonly TransactionSummary[] = [];
+  loading = true;
+
+  readonly viewModel$: Observable<{ block: BlockDetails | undefined; transactions: readonly TransactionSummary[]; loading: boolean }> =
     this.route.paramMap.pipe(
       map((params: ParamMap) => params.get('hash')),
-      switchMap((hash: string | null) =>
-        this.data.blocks$.pipe(map(() => this.buildViewModel(hash)))
-      )
+      switchMap((hash: string | null) => {
+        this.loading = true;
+        this.block = undefined;
+        this.transactions = [];
+        
+        if (!hash) {
+          this.loading = false;
+          return this.data.blocks$.pipe(map(() => ({ block: this.block, transactions: this.transactions, loading: this.loading })));
+        }
+
+        const cached = this.data.getBlockDetails(hash as BlockHash);
+        if (cached) {
+          this.loading = false;
+          this.block = cached;
+          this.transactions = cached.transactions ?? [];
+          return this.data.blocks$.pipe(map(() => ({ block: this.block, transactions: this.transactions, loading: this.loading })));
+        }
+
+        this.loadBlock(hash);
+        return this.data.blocks$.pipe(map(() => ({ block: this.block, transactions: this.transactions, loading: this.loading })));
+      })
     );
 
-  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService) {}
+  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService, private readonly cdr: ChangeDetectorRef) {}
+
+  async loadBlock(hashOrNumber: string): Promise<void> {
+    const isNumber = /^\d+$/.test(hashOrNumber);
+    
+    let block: BlockDetails | null = null;
+    if (isNumber) {
+      block = await this.data.fetchBlockByNumber(parseInt(hashOrNumber, 10));
+    } else {
+      block = await this.data.fetchBlockByHash(hashOrNumber);
+    }
+    
+    this.loading = false;
+    this.block = block ?? undefined;
+    this.transactions = block?.transactions ?? [];
+    this.cdr.detectChanges();
+  }
 
   trackByHash(_: number, tx: TransactionSummary): TransactionSummary['hash'] {
     return tx.hash;
@@ -315,20 +360,5 @@ export class BlockDetailComponent {
   formatCoins(value: AttoValue): string {
     const normalized = (value as number) / 1_000_000;
     return normalized.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  }
-
-  private buildViewModel(hash: string | null): {
-    block: BlockDetails | undefined;
-    transactions: readonly TransactionSummary[];
-  } {
-    if (!hash) {
-      return { block: undefined, transactions: [] };
-    }
-
-    const block = this.data.getBlockDetails(hash as BlockHash) ?? undefined;
-    return {
-      block,
-      transactions: block?.transactions ?? []
-    };
   }
 }

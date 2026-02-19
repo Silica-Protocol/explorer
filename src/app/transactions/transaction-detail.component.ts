@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, ParamMap, RouterModule } from '@angular/router';
-import { map, switchMap } from 'rxjs/operators';
-import { combineLatest, Observable } from 'rxjs';
+import { map, switchMap, of } from 'rxjs';
+import { Observable } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import type { AttoValue } from '@shared/models/common';
 import type { BlockSummary } from '@shared/models/block.model';
@@ -13,87 +13,90 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <ng-container *ngIf="viewModel$ | async as vm; else loading">
-      <section class="tx-detail" *ngIf="vm.transaction; else notFound" aria-labelledby="tx-heading">
+    <ng-container *ngIf="viewModel$ | async">
+      <section class="tx-detail" *ngIf="transaction; else notFound" aria-labelledby="tx-heading">
         <header class="tx-detail__header">
           <div>
             <p class="tx-detail__label">Transaction</p>
-            <h1 id="tx-heading">{{ vm.transaction.hash }}</h1>
-            <p class="muted">Included in block {{ vm.transaction.blockHeight | number }}</p>
+            <h1 id="tx-heading">{{ transaction.hash }}</h1>
+            <p class="muted" *ngIf="transaction.blockHeight">Included in block {{ transaction.blockHeight | number }}</p>
+            <p class="muted" *ngIf="!transaction.blockHeight">Block info unavailable</p>
           </div>
-          <div class="tx-detail__status" [class.tx-detail__status--confirmed]="vm.transaction.status === 'confirmed'">
-            {{ vm.transaction.status | titlecase }}
+          <div class="tx-detail__status" [class.tx-detail__status--confirmed]="transaction.status === 'confirmed'">
+            {{ transaction.status | titlecase }}
           </div>
         </header>
 
         <section class="tx-detail__grid" aria-label="Transaction overview">
-          <article>
-            <h2>Timestamp</h2>
-            <p>{{ vm.transaction.timestamp | date: 'medium' }}</p>
-          </article>
-          <article>
+          <article *ngIf="transaction.blockHash">
             <h2>Block</h2>
-            <p><a [routerLink]="['/block', vm.transaction.blockHash]">{{ vm.transaction.blockHash }}</a></p>
+            <p><a [routerLink]="['/block', transaction.blockHash]">{{ transaction.blockHash }}</a></p>
           </article>
-          <article>
-            <h2>Value</h2>
-            <p>{{ formatCoins(vm.transaction.value) }} CHRT</p>
+          <article class="tx-row">
+            <span class="tx-row__item">
+              <span class="tx-row__label">Value</span>
+              <span class="tx-row__value">{{ formatCoins(transaction.value) }} CHRT</span>
+            </span>
+            <span class="tx-row__item">
+              <span class="tx-row__label">Fee</span>
+              <span class="tx-row__value">{{ formatCoins(transaction.fee) }} CHRT</span>
+            </span>
+            <span class="tx-row__item">
+              <span class="tx-row__label">Timestamp</span>
+              <span class="tx-row__value">{{ transaction.timestamp | date:'yyyy MMM dd, h:mm:ss a' }}</span>
+            </span>
           </article>
-          <article>
-            <h2>Fee</h2>
-            <p>{{ formatCoins(vm.transaction.fee) }} CHRT</p>
-          </article>
-          <article>
+          <article class="tx-address">
             <h2>From</h2>
-            <p>{{ vm.transaction.from }}</p>
+            <p><a [routerLink]="['/account', transaction.from]">{{ transaction.from }}</a></p>
           </article>
-          <article>
+          <article class="tx-address">
             <h2>To</h2>
-            <p>{{ vm.transaction.to }}</p>
+            <p><a [routerLink]="['/account', transaction.to]">{{ transaction.to }}</a></p>
           </article>
-          <article>
+          <article *ngIf="transaction.confirmations > 0">
             <h2>Confirmations</h2>
-            <p>{{ vm.transaction.confirmations }}</p>
+            <p>{{ transaction.confirmations }}</p>
           </article>
-          <article *ngIf="vm.transaction.memo">
+          <article *ngIf="transaction.memo">
             <h2>Memo</h2>
-            <p>{{ vm.transaction.memo }}</p>
+            <p>{{ transaction.memo }}</p>
           </article>
         </section>
 
-        <section class="tx-detail__io" aria-label="Inputs and outputs">
-          <div class="io-column">
-            <h3>Inputs ({{ vm.transaction.inputs.length }})</h3>
+        <section class="tx-detail__io" aria-label="Inputs and outputs" *ngIf="transaction.inputs.length > 0 || transaction.outputs.length > 0">
+          <div class="io-column" *ngIf="transaction.inputs.length > 0">
+            <h3>Inputs ({{ transaction.inputs.length }})</h3>
             <ul>
-              <li *ngFor="let input of vm.transaction.inputs">{{ input }}</li>
+              <li *ngFor="let input of transaction.inputs">{{ input }}</li>
             </ul>
           </div>
-          <div class="io-column">
-            <h3>Outputs ({{ vm.transaction.outputs.length }})</h3>
+          <div class="io-column" *ngIf="transaction.outputs.length > 0">
+            <h3>Outputs ({{ transaction.outputs.length }})</h3>
             <ul>
-              <li *ngFor="let output of vm.transaction.outputs">{{ output }}</li>
+              <li *ngFor="let output of transaction.outputs">{{ output }}</li>
             </ul>
           </div>
         </section>
 
-        <section *ngIf="vm.block" aria-label="Block summary" class="tx-detail__block">
+        <section *ngIf="block" aria-label="Block summary" class="tx-detail__block">
           <h2>Block Summary</h2>
           <div class="block-summary">
             <div>
               <h3>Hash</h3>
-              <p>{{ vm.block.hash }}</p>
+              <p>{{ block.hash }}</p>
             </div>
             <div>
-              <h3>Miner</h3>
-              <p>{{ vm.block.miner }}</p>
+              <h3>Validator</h3>
+              <p>{{ block.miner }}</p>
             </div>
             <div>
               <h3>Status</h3>
-              <p>{{ vm.block.status | titlecase }}</p>
+              <p>{{ block.status | titlecase }}</p>
             </div>
             <div>
               <h3>Transactions</h3>
-              <p>{{ vm.block.transactionCount }}</p>
+              <p>{{ block.transactionCount }}</p>
             </div>
           </div>
         </section>
@@ -167,6 +170,53 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
         gap: 1rem;
+      }
+
+      .tx-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        grid-column: 1 / -1;
+      }
+
+      .tx-row__item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        flex: 1;
+        padding: 0.75rem;
+        background: rgba(14, 165, 233, 0.03);
+        border-radius: 12px;
+        border: 1px solid rgba(14, 165, 233, 0.08);
+      }
+
+      .tx-row__label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .tx-row__value {
+        font-size: 1.1rem;
+        font-weight: 500;
+      }
+
+      .tx-address {
+        grid-column: 1 / -1;
+      }
+
+      .tx-address p {
+        word-break: break-all;
+      }
+
+      .tx-address a {
+        color: var(--accent-light);
+        text-decoration: none;
+      }
+
+      .tx-address a:hover {
+        text-decoration: underline;
       }
 
       .tx-detail__grid article {
@@ -283,33 +333,50 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TransactionDetailComponent {
-  readonly viewModel$: Observable<{ transaction: TransactionDetails | undefined; block: BlockSummary | undefined }> =
+  loading = true;
+  transaction: TransactionDetails | undefined;
+  block: BlockSummary | undefined;
+
+  readonly viewModel$: Observable<{ transaction: TransactionDetails | undefined; block: BlockSummary | undefined; loading: boolean }> =
     this.route.paramMap.pipe(
       map((params: ParamMap) => params.get('hash')),
-      switchMap((hash: string | null) =>
-        combineLatest([this.data.recentTransactions$, this.data.blocks$]).pipe(
-          map(() => this.buildViewModel(hash))
-        )
-      )
+      switchMap((hash: string | null) => {
+        this.loading = true;
+        this.transaction = undefined;
+        this.block = undefined;
+        
+        if (!hash) {
+          this.loading = false;
+          return of({ transaction: undefined, block: undefined, loading: false });
+        }
+
+        const cached = this.data.getTransactionDetails(hash as TransactionDetails['hash']);
+        if (cached) {
+          this.loading = false;
+          this.transaction = cached;
+          this.block = this.data.getBlockDetails(cached.blockHash);
+          return of({ transaction: this.transaction, block: this.block, loading: false });
+        }
+
+        this.loadTransaction(hash);
+        return of({ transaction: undefined, block: undefined, loading: true });
+      })
     );
 
-  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService) {}
+  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService, private readonly cdr: ChangeDetectorRef) {}
+
+  async loadTransaction(hash: string): Promise<void> {
+    const tx = await this.data.fetchTransactionByHashFromNode(hash);
+    this.loading = false;
+    this.transaction = tx ?? undefined;
+    if (this.transaction?.blockHash) {
+      this.block = this.data.getBlockDetails(this.transaction.blockHash);
+    }
+    this.cdr.detectChanges();
+  }
 
   formatCoins(value: AttoValue): string {
     const normalized = (value as number) / 1_000_000;
     return normalized.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  }
-
-  private buildViewModel(hash: string | null): {
-    transaction: TransactionDetails | undefined;
-    block: BlockSummary | undefined;
-  } {
-    if (!hash) {
-      return { transaction: undefined, block: undefined };
-    }
-
-    const transaction = this.data.getTransactionDetails(hash as TransactionDetails['hash']) ?? undefined;
-    const block = transaction ? this.data.getBlockDetails(transaction.blockHash) ?? undefined : undefined;
-    return { transaction, block };
   }
 }

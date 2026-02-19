@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, ParamMap, RouterModule } from '@angular/router';
-import { combineLatest, Observable } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
+import { BehaviorSubject, Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import type { AttoValue } from '@shared/models/common';
 import type { AccountActivitySnapshot } from '@shared/models/account.model';
@@ -54,8 +54,12 @@ import type { BlockSummary } from '@shared/models/block.model';
               <h3>Outbound ({{ vm.snapshot.outbound.length }})</h3>
               <ul>
                 <li *ngFor="let tx of vm.snapshot.outbound; trackBy: trackByHash">
-                  <a [routerLink]="['/transaction', tx.hash]">
-                    {{ formatHash(tx.hash) }} · {{ formatCoins(tx.value) }} CHRT → {{ formatHash(tx.to) }}
+                  <a [routerLink]="['/transaction', tx.hash]" class="tx-item">
+                    <span class="tx-item__main">
+                      <span class="tx-item__to">{{ formatHash(tx.to) }}</span>
+                      <span class="tx-item__amount">{{ formatCoins(tx.value) }} CHRT</span>
+                    </span>
+                    <span class="tx-item__id">{{ formatHash(tx.hash) }}</span>
                   </a>
                 </li>
               </ul>
@@ -65,8 +69,12 @@ import type { BlockSummary } from '@shared/models/block.model';
               <h3>Inbound ({{ vm.snapshot.inbound.length }})</h3>
               <ul>
                 <li *ngFor="let tx of vm.snapshot.inbound; trackBy: trackByHash">
-                  <a [routerLink]="['/transaction', tx.hash]">
-                    {{ formatHash(tx.hash) }} · {{ formatCoins(tx.value) }} CHRT ← {{ formatHash(tx.from) }}
+                  <a [routerLink]="['/transaction', tx.hash]" class="tx-item">
+                    <span class="tx-item__main">
+                      <span class="tx-item__from">{{ formatHash(tx.from) }}</span>
+                      <span class="tx-item__amount">{{ formatCoins(tx.value) }} CHRT</span>
+                    </span>
+                    <span class="tx-item__id">{{ formatHash(tx.hash) }}</span>
                   </a>
                 </li>
               </ul>
@@ -187,12 +195,62 @@ import type { BlockSummary } from '@shared/models/block.model';
         gap: 0.6rem;
       }
 
-      article li a {
-        display: inline-flex;
-        gap: 0.4rem;
+      .tx-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
         text-decoration: none;
         color: inherit;
         font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+        padding: 0.6rem 0.75rem;
+        border-radius: 10px;
+        border: 1px solid rgba(14, 165, 233, 0.08);
+        background: rgba(14, 165, 233, 0.02);
+        transition: all 0.2s ease;
+      }
+
+      .tx-item:hover {
+        background: rgba(14, 165, 233, 0.08);
+        border-color: rgba(14, 165, 233, 0.25);
+        transform: translateX(2px);
+      }
+
+      .tx-item__main {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .tx-item__to,
+      .tx-item__from {
+        color: var(--accent-light);
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tx-item__amount {
+        font-size: 0.9rem;
+        flex-shrink: 0;
+      }
+
+      .tx-item__id {
+        font-size: 0.7rem;
+        color: var(--text-secondary);
+        opacity: 0.7;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 480px) {
+        .tx-item__to,
+        .tx-item__from,
+        .tx-item__id {
+          max-width: 120px;
+        }
       }
 
       .account-detail__blocks {
@@ -268,17 +326,100 @@ import type { BlockSummary } from '@shared/models/block.model';
   ],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class AccountDetailComponent {
-  readonly viewModel$: Observable<{ snapshot: AccountActivitySnapshot | undefined }> = this.route.paramMap.pipe(
-    map((params: ParamMap) => params.get('address')),
-    switchMap((address: string | null) =>
-      combineLatest([this.data.accounts$, this.data.recentTransactions$]).pipe(
-        map(() => ({ snapshot: this.buildSnapshot(address) }))
-      )
-    )
-  );
+export class AccountDetailComponent implements OnDestroy {
+  snapshot: AccountActivitySnapshot | undefined;
+  loading = true;
+  currentAddress: string | null = null;
+  
+  private readonly destroy$ = new Subject<void>();
+  private readonly vmSubject = new BehaviorSubject<{ snapshot: AccountActivitySnapshot | undefined; loading: boolean }>({ snapshot: undefined, loading: true });
 
-  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService) {}
+  readonly viewModel$ = this.vmSubject.asObservable();
+
+  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService, private readonly cdr: ChangeDetectorRef) {
+    this.route.paramMap.pipe(takeUntil(this.destroy$)).subscribe((params: ParamMap) => {
+      const address = params.get('address');
+      this.currentAddress = address;
+      this.loadAccount(address);
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  async loadAccount(address: string | null): Promise<void> {
+    this.loading = true;
+    this.snapshot = undefined;
+    this.vmSubject.next({ snapshot: this.snapshot, loading: this.loading });
+    
+    if (!address) {
+      this.loading = false;
+      this.vmSubject.next({ snapshot: undefined, loading: this.loading });
+      return;
+    }
+
+    const cached = this.data.getAccountSnapshot(address as AccountActivitySnapshot['account']['address']);
+    if (cached) {
+      this.loading = false;
+      this.snapshot = cached;
+      this.vmSubject.next({ snapshot: this.snapshot, loading: this.loading });
+      return;
+    }
+
+    try {
+      const [balanceInfo, txHistory] = await Promise.all([
+        this.data.fetchBalance(address),
+        this.data.fetchTransactionHistory(address, 50, null)
+      ]);
+
+      this.snapshot = {
+        account: {
+          address: balanceInfo.address as unknown as AccountActivitySnapshot['account']['address'],
+          balance: this.data['toAttoValue'](parseInt(balanceInfo.balance, 10)),
+          stakedBalance: this.data['toAttoValue'](0) as unknown as AttoValue,
+          nonce: balanceInfo.nonce as unknown as AccountActivitySnapshot['account']['nonce'],
+          lastSeen: Date.now() as unknown as AccountActivitySnapshot['account']['lastSeen'],
+          reputation: 0
+        },
+        outbound: (txHistory.transactions ?? [])
+          .filter(tx => tx.direction === 'outgoing')
+          .slice(0, 32)
+          .map(tx => ({
+            hash: tx.tx_id as unknown as TransactionSummary['hash'],
+            blockHash: tx.block_hash as unknown as TransactionSummary['blockHash'],
+            blockHeight: this.data['toPositiveInteger'](tx.block_number) as unknown as TransactionSummary['blockHeight'],
+            from: tx.sender as unknown as TransactionSummary['from'],
+            to: tx.recipient as unknown as TransactionSummary['to'],
+            value: this.data['toAttoValue'](tx.amount) as unknown as TransactionSummary['value'],
+            fee: this.data['toAttoValue'](tx.fee) as unknown as TransactionSummary['fee'],
+            timestamp: tx.timestamp as unknown as TransactionSummary['timestamp'],
+            status: tx.status as unknown as TransactionSummary['status']
+          })),
+        inbound: (txHistory.transactions ?? [])
+          .filter(tx => tx.direction === 'incoming')
+          .slice(0, 32)
+          .map(tx => ({
+            hash: tx.tx_id as unknown as TransactionSummary['hash'],
+            blockHash: tx.block_hash as unknown as TransactionSummary['blockHash'],
+            blockHeight: this.data['toPositiveInteger'](tx.block_number) as unknown as TransactionSummary['blockHeight'],
+            from: tx.sender as unknown as TransactionSummary['from'],
+            to: tx.recipient as unknown as TransactionSummary['to'],
+            value: this.data['toAttoValue'](tx.amount) as unknown as TransactionSummary['value'],
+            fee: this.data['toAttoValue'](tx.fee) as unknown as TransactionSummary['fee'],
+            timestamp: tx.timestamp as unknown as TransactionSummary['timestamp'],
+            status: tx.status as unknown as TransactionSummary['status']
+          })),
+        recentBlocks: []
+      };
+    } catch (e) {
+      console.error('Error loading account:', e);
+    }
+    this.loading = false;
+    this.vmSubject.next({ snapshot: this.snapshot, loading: this.loading });
+    this.cdr.detectChanges();
+  }
 
   trackByHash(_: number, tx: TransactionSummary): TransactionSummary['hash'] {
     return tx.hash;
@@ -289,19 +430,11 @@ export class AccountDetailComponent {
   }
 
   formatHash(value: string): string {
-    return value.length > 12 ? `${value.slice(0, 12)}…${value.slice(-4)}` : value;
+    return value;
   }
 
   formatCoins(value: AttoValue): string {
     const normalized = (value as number) / 1_000_000;
     return normalized.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  }
-
-  private buildSnapshot(address: string | null): AccountActivitySnapshot | undefined {
-    if (!address) {
-      return undefined;
-    }
-
-    return this.data.getAccountSnapshot(address as AccountActivitySnapshot['account']['address']) ?? undefined;
   }
 }
