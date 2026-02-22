@@ -34,6 +34,70 @@ import type {
   CommitteeId
 } from '@silica-protocol/explorer-models';
 
+export interface ExtendedNetworkStatistics extends NetworkStatistics {
+  readonly dagTipCommitIndex: number;
+  readonly finalizedCommitIndex: number;
+  readonly dagFinalityGap: number;
+  readonly txQueueSize: number;
+  readonly pendingFinalityCerts: number;
+  readonly isSynced: boolean;
+  readonly epoch: number;
+  readonly epochDurationMs: number;
+  readonly epochElapsedMs: number;
+  readonly timeToNextEpochMs: number;
+}
+
+export interface HealthData {
+  readonly status: string;
+  readonly version: string;
+  readonly uptimeSeconds: number;
+  readonly consensus: {
+    readonly isSynced: boolean;
+    readonly currentHeight: number;
+    readonly dagTipCommitIndex: number;
+    readonly finalizedCommitIndex: number;
+    readonly dagFinalityGap: number;
+    readonly txQueueSize: number;
+    readonly pendingFinalityCerts: number;
+    readonly validatorCount: number;
+    readonly committeeSize: number;
+    readonly epoch: number;
+    readonly epochDurationMs: number;
+    readonly epochElapsedMs: number;
+    readonly timeToNextEpochMs: number;
+  };
+  readonly network: {
+    readonly peerCount: number;
+    readonly connectedPeers: readonly string[];
+    readonly averageLatencyMs: number;
+    readonly connectionQuality: number;
+  };
+}
+
+export type AlertSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface AlertInfo {
+  readonly alert_type: string;
+  readonly severity: AlertSeverity;
+  readonly message: string;
+  readonly timestamp: number;
+  readonly resolved: boolean;
+}
+
+export interface AlertEvent {
+  readonly id: string;
+  readonly alert_type: string;
+  readonly severity: AlertSeverity;
+  readonly message: string;
+  readonly timestamp: number;
+  readonly resolved_at: number | null;
+}
+
+export interface AlertsResponse {
+  readonly active_alerts: Record<string, AlertInfo>;
+  readonly alert_history: AlertEvent[];
+}
+
 interface MutableAccountState {
   readonly address: AccountAddress;
   balance: number;
@@ -58,7 +122,9 @@ export class ExplorerDataService implements OnDestroy {
   private readonly rng: DeterministicRandom;
   private readonly blocksSubject = new BehaviorSubject<readonly BlockSummary[]>([]);
   private readonly transactionsSubject = new BehaviorSubject<readonly TransactionSummary[]>([]);
-  private readonly networkSubject = new BehaviorSubject<NetworkStatistics>(this.emptyNetworkStats());
+  private readonly networkSubject = new BehaviorSubject<ExtendedNetworkStatistics>(this.emptyNetworkStats());
+  private readonly healthSubject = new BehaviorSubject<HealthData | null>(null);
+  private readonly alertsSubject = new BehaviorSubject<AlertsResponse>({ active_alerts: {}, alert_history: [] });
   private readonly accountsSubject = new BehaviorSubject<readonly AccountSummary[]>([]);
   private readonly lastRefreshedAtSubject = new BehaviorSubject<number | null>(null);
   private readonly refreshInFlightSubject = new BehaviorSubject<boolean>(false);
@@ -129,8 +195,16 @@ export class ExplorerDataService implements OnDestroy {
     return this.transactionsSubject.asObservable();
   }
 
-  get networkStats$(): Observable<NetworkStatistics> {
+  get networkStats$(): Observable<ExtendedNetworkStatistics> {
     return this.networkSubject.asObservable();
+  }
+
+  get health$(): Observable<HealthData | null> {
+    return this.healthSubject.asObservable();
+  }
+
+  get alerts$(): Observable<AlertsResponse> {
+    return this.alertsSubject.asObservable();
   }
 
   get accounts$(): Observable<readonly AccountSummary[]> {
@@ -752,6 +826,8 @@ export class ExplorerDataService implements OnDestroy {
     this.blocksSubject.complete();
     this.transactionsSubject.complete();
     this.networkSubject.complete();
+    this.healthSubject.complete();
+    this.alertsSubject.complete();
     this.accountsSubject.complete();
     this.lastRefreshedAtSubject.complete();
     this.refreshInFlightSubject.complete();
@@ -913,13 +989,23 @@ export class ExplorerDataService implements OnDestroy {
     const finalizedHeightNumber = Math.max(0, (currentHeight as number) - this.config.finalityLag);
     const finalizedHeight = this.toPositiveInteger(finalizedHeightNumber);
 
-    const stats: NetworkStatistics = {
+    const stats: ExtendedNetworkStatistics = {
       currentHeight,
       finalizedHeight,
       averageTps,
       activeValidators: this.currentCommittee.length,
       nextElectionEtaMs: Math.max(0, this.nextElectionTimestamp - Date.now()),
-      timestamp: this.toUnixMs(Date.now())
+      timestamp: this.toUnixMs(Date.now()),
+      dagTipCommitIndex: 0,
+      finalizedCommitIndex: 0,
+      dagFinalityGap: 0,
+      txQueueSize: 0,
+      pendingFinalityCerts: 0,
+      isSynced: true,
+      epoch: 0,
+      epochDurationMs: 0,
+      epochElapsedMs: 0,
+      timeToNextEpochMs: 0
     };
 
     this.networkSubject.next(stats);
@@ -1180,6 +1266,19 @@ export class ExplorerDataService implements OnDestroy {
     return url.toString();
   }
 
+  async fetchAlerts(): Promise<AlertsResponse> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<AlertsResponse>(this.nodeEndpoint('alerts'))
+      );
+      this.alertsSubject.next(response);
+      return response;
+    } catch (err) {
+      console.warn('Failed to fetch alerts', err);
+      return { active_alerts: {}, alert_history: [] };
+    }
+  }
+
   private async jsonRpcCall<TResult>(method: string, params?: unknown): Promise<TResult> {
     assert(method.length > 0, 'JSON-RPC method must not be empty');
     const request: JsonRpcRequest = {
@@ -1372,22 +1471,90 @@ export class ExplorerDataService implements OnDestroy {
 
       const uniqueValidators = new Set(blocks.map((b) => b.validator_address));
 
-      // Prefer consensus-reported validator count when available.
-      // The block stream may be too small early on (e.g., only 1 produced block => 1 unique producer).
+      let healthData: HealthData | null = null;
+      let dagTipCommitIndex = 0;
+      let finalizedCommitIndex = 0;
+      let dagFinalityGap = 0;
+      let txQueueSize = 0;
+      let pendingFinalityCerts = 0;
       let consensusValidatorCount: number | undefined;
+      let isSynced = false;
+      let epoch = 0;
+      let epochDurationMs = 0;
+      let epochElapsedMs = 0;
+      let timeToNextEpochMs = 0;
+      let peerCount = 0;
+      let connectedPeers: readonly string[] = [];
+      let averageLatencyMs = 0;
+      let connectionQuality = 1.0;
+
       if (typeof health === 'object' && health !== null) {
         const h = health as Record<string, unknown>;
+        
+        const status = typeof h['status'] === 'string' ? h['status'] : 'unknown';
+        const version = typeof h['version'] === 'string' ? h['version'] : 'unknown';
+        const uptimeSeconds = typeof h['uptime_seconds'] === 'number' ? h['uptime_seconds'] : 0;
+
         const consensus = h['consensus_status'];
         if (typeof consensus === 'object' && consensus !== null) {
           const cs = consensus as Record<string, unknown>;
+          isSynced = cs['is_synced'] === true;
+          dagTipCommitIndex = typeof cs['dag_tip_commit_index'] === 'number' ? cs['dag_tip_commit_index'] as number : 0;
+          finalizedCommitIndex = typeof cs['finalized_commit_index'] === 'number' ? cs['finalized_commit_index'] as number : 0;
+          dagFinalityGap = typeof cs['dag_finality_gap'] === 'number' ? cs['dag_finality_gap'] as number : 0;
+          txQueueSize = typeof cs['tx_queue_size'] === 'number' ? cs['tx_queue_size'] as number : 0;
+          pendingFinalityCerts = typeof cs['pending_finality_certs'] === 'number' ? cs['pending_finality_certs'] as number : 0;
+          epoch = typeof cs['epoch'] === 'number' ? cs['epoch'] as number : 0;
+          epochDurationMs = typeof cs['epoch_duration_ms'] === 'number' ? cs['epoch_duration_ms'] as number : 0;
+          epochElapsedMs = typeof cs['epoch_elapsed_ms'] === 'number' ? cs['epoch_elapsed_ms'] as number : 0;
+          timeToNextEpochMs = typeof cs['time_to_next_epoch_ms'] === 'number' ? cs['time_to_next_epoch_ms'] as number : 0;
+          
           const vc = cs['validator_count'];
           if (typeof vc === 'number' && Number.isFinite(vc) && vc > 0) {
             consensusValidatorCount = vc;
           }
         }
+
+        const network = h['network_status'];
+        if (typeof network === 'object' && network !== null) {
+          const ns = network as Record<string, unknown>;
+          peerCount = typeof ns['peer_count'] === 'number' ? ns['peer_count'] as number : 0;
+          if (Array.isArray(ns['connected_peers'])) {
+            connectedPeers = ns['connected_peers'] as string[];
+          }
+          averageLatencyMs = typeof ns['average_latency_ms'] === 'number' ? ns['average_latency_ms'] as number : 0;
+          connectionQuality = typeof ns['connection_quality'] === 'number' ? ns['connection_quality'] as number : 1.0;
+        }
+
+        healthData = {
+          status,
+          version,
+          uptimeSeconds,
+          consensus: {
+            isSynced,
+            currentHeight: latest,
+            dagTipCommitIndex,
+            finalizedCommitIndex,
+            dagFinalityGap,
+            txQueueSize,
+            pendingFinalityCerts,
+            validatorCount: consensusValidatorCount ?? 0,
+            committeeSize: 0,
+            epoch,
+            epochDurationMs,
+            epochElapsedMs,
+            timeToNextEpochMs
+          },
+          network: {
+            peerCount,
+            connectedPeers,
+            averageLatencyMs,
+            connectionQuality
+          }
+        };
+        this.healthSubject.next(healthData);
       }
       
-      // If consensus reports a validator count, use that; otherwise count unique validators from blocks
       const activeValidators = this.toPositiveInteger(
         consensusValidatorCount ?? uniqueValidators.size
       );
@@ -1397,8 +1564,18 @@ export class ExplorerDataService implements OnDestroy {
         finalizedHeight,
         averageTps,
         activeValidators,
-        nextElectionEtaMs: 0,
-        timestamp: this.toUnixMs(now)
+        nextElectionEtaMs: timeToNextEpochMs,
+        timestamp: this.toUnixMs(now),
+        dagTipCommitIndex,
+        finalizedCommitIndex,
+        dagFinalityGap,
+        txQueueSize,
+        pendingFinalityCerts,
+        isSynced,
+        epoch,
+        epochDurationMs,
+        epochElapsedMs,
+        timeToNextEpochMs
       });
 
       this.lastRefreshedAtSubject.next(Date.now());
@@ -1500,7 +1677,7 @@ export class ExplorerDataService implements OnDestroy {
     return summary;
   }
 
-  private emptyNetworkStats(): NetworkStatistics {
+  private emptyNetworkStats(): ExtendedNetworkStatistics {
     const zero = this.toPositiveInteger(0);
     const timestamp = this.toUnixMs(Date.now());
     return {
@@ -1509,7 +1686,17 @@ export class ExplorerDataService implements OnDestroy {
       averageTps: 0,
       activeValidators: 0,
       nextElectionEtaMs: 0,
-      timestamp
+      timestamp,
+      dagTipCommitIndex: 0,
+      finalizedCommitIndex: 0,
+      dagFinalityGap: 0,
+      txQueueSize: 0,
+      pendingFinalityCerts: 0,
+      isSynced: false,
+      epoch: 0,
+      epochDurationMs: 0,
+      epochElapsedMs: 0,
+      timeToNextEpochMs: 0
     };
   }
 

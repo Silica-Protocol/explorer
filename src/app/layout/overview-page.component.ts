@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { map } from 'rxjs/operators';
-import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { ExplorerDataService, ExtendedNetworkStatistics } from '@app/services/explorer-data.service';
 import { BlockListComponent } from '@blocks/block-list.component';
 import { BlockVisualizerComponent } from '@app/visualizer/block-visualizer.component';
-import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explorer-models';
+import type { PositiveInteger } from '@silica-protocol/explorer-models';
 
 @Component({
   selector: 'overview-page',
@@ -27,12 +27,30 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
             <p>{{ finalizedHeight$ | async }}</p>
           </article>
           <article role="listitem" class="metric-card">
+            <h2>DAG Tip</h2>
+            <p>{{ dagTipCommitIndex$ | async }}</p>
+          </article>
+          <article role="listitem" class="metric-card">
+            <h2>Finality Gap</h2>
+            <p>{{ dagFinalityGap$ | async }}</p>
+          </article>
+          <article role="listitem" class="metric-card">
+            <h2>Tx Queue</h2>
+            <p>{{ txQueueSize$ | async }}</p>
+          </article>
+          <article role="listitem" class="metric-card">
             <h2>Average TPS</h2>
             <p>{{ averageTps$ | async }}</p>
           </article>
           <article role="listitem" class="metric-card">
             <h2>Active Validators</h2>
             <p>{{ activeValidators$ | async }}</p>
+          </article>
+          <article role="listitem" class="metric-card">
+            <h2>Sync Status</h2>
+            <p class="sync-status" [class.synced]="isSynced$ | async" [class.syncing]="!(isSynced$ | async)">
+              {{ (isSynced$ | async) ? 'Synced' : 'Syncing' }}
+            </p>
           </article>
         </div>
       </header>
@@ -89,7 +107,7 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
         grid-template-columns: repeat(4, 1fr);
         gap: 0.75rem;
         flex: 1;
-        max-width: 600px;
+        max-width: 100%;
       }
 
       .metric-card {
@@ -127,7 +145,7 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
 
       .metric-card h2 {
         margin: 0;
-        font-size: 0.95rem;
+        font-size: 0.85rem;
         color: var(--text-secondary);
         font-weight: 500;
         position: relative;
@@ -147,6 +165,16 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
         z-index: 1;
       }
 
+      .sync-status.synced {
+        color: #22c55e !important;
+        -webkit-text-fill-color: #22c55e;
+      }
+
+      .sync-status.syncing {
+        color: #f59e0b !important;
+        -webkit-text-fill-color: #f59e0b;
+      }
+
       .section-heading {
         display: flex;
         flex-direction: column;
@@ -162,6 +190,12 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
       .section-subtitle {
         margin: 0;
         color: var(--text-secondary);
+      }
+
+      @media (max-width: 1200px) {
+        .overview__metrics {
+          grid-template-columns: repeat(4, 1fr);
+        }
       }
 
       @media (max-width: 960px) {
@@ -189,15 +223,25 @@ import type { NetworkStatistics, PositiveInteger } from '@silica-protocol/explor
 export class OverviewPageComponent {
   private readonly stats$ = this.data.networkStats$;
 
-  readonly currentHeight$ = this.stats$.pipe(map((stats) => this.toNumber(stats.currentHeight)));
-  readonly finalizedHeight$ = this.stats$.pipe(map((stats) => this.toNumber(stats.finalizedHeight)));
+  readonly currentHeight$ = this.stats$.pipe(map((stats) => this.formatNumber(stats.currentHeight)));
+  readonly finalizedHeight$ = this.stats$.pipe(map((stats) => this.formatNumber(stats.finalizedHeight)));
+  readonly dagTipCommitIndex$ = this.stats$.pipe(map((stats) => this.formatNumber(stats.dagTipCommitIndex)));
+  readonly finalizedCommitIndex$ = this.stats$.pipe(map((stats) => this.formatNumber(stats.finalizedCommitIndex)));
+  readonly dagFinalityGap$ = this.stats$.pipe(map((stats) => stats.dagFinalityGap.toString()));
+  readonly txQueueSize$ = this.stats$.pipe(map((stats) => stats.txQueueSize.toString()));
   readonly averageTps$ = this.stats$.pipe(map((stats) => stats.averageTps.toFixed(2)));
-  readonly activeValidators$ = this.stats$.pipe(map((stats) => stats.activeValidators));
+  readonly activeValidators$ = this.stats$.pipe(map((stats) => stats.activeValidators.toString()));
+  readonly isSynced$ = this.stats$.pipe(map((stats) => stats.isSynced));
   readonly blockCount$ = this.data.blocks$.pipe(map((blocks) => blocks.length));
 
   constructor(private readonly data: ExplorerDataService) {}
 
   private toNumber(value: PositiveInteger): number {
     return value as number;
+  }
+
+  private formatNumber(value: PositiveInteger | number): string {
+    const num = typeof value === 'number' ? value : (value as number);
+    return num.toLocaleString();
   }
 }

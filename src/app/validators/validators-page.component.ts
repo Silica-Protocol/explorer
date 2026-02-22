@@ -3,8 +3,8 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { combineLatest, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { ExplorerDataService } from '@app/services/explorer-data.service';
-import type { NetworkStatistics, PositiveInteger, UnixMs, Hash, CommitteeId } from '@silica-protocol/explorer-models';
+import { ExplorerDataService, ExtendedNetworkStatistics } from '@app/services/explorer-data.service';
+import type { PositiveInteger, UnixMs, Hash, CommitteeId } from '@silica-protocol/explorer-models';
 import type { BlockSummary, AccountAddress } from '@silica-protocol/explorer-models';
 import { assert } from '@shared/util/assert';
 
@@ -28,7 +28,7 @@ interface NodeInfo {
 }
 
 interface ValidatorsViewModel {
-  readonly stats: NetworkStatistics;
+  readonly stats: ExtendedNetworkStatistics;
   readonly validators: readonly ValidatorInfo[];
   readonly nodes: readonly NodeInfo[];
   readonly totalStaked: number;
@@ -72,6 +72,18 @@ const DEGRADED_TPS_THRESHOLD = 1;
           <span class="metric-label">blocks</span>
         </article>
 
+        <article class="metric-card metric-card--purple">
+          <h2>DAG Tip</h2>
+          <p class="metric-value">{{ vm.stats.dagTipCommitIndex | number }}</p>
+          <span class="metric-label">commit index</span>
+        </article>
+
+        <article class="metric-card metric-card--orange">
+          <h2>Tx Queue</h2>
+          <p class="metric-value">{{ vm.stats.txQueueSize }}</p>
+          <span class="metric-label">pending</span>
+        </article>
+
         <article class="metric-card metric-card--green">
           <h2>Active Validators</h2>
           <p class="metric-value">{{ vm.stats.activeValidators }}</p>
@@ -91,9 +103,11 @@ const DEGRADED_TPS_THRESHOLD = 1;
         </article>
 
         <article class="metric-card">
-          <h2>Participation</h2>
-          <p class="metric-value">{{ vm.participation | number:'1.0-1' }}%</p>
-          <span class="metric-label">of committee</span>
+          <h2>Sync Status</h2>
+          <p class="metric-value sync-status" [class.synced]="vm.stats.isSynced" [class.syncing]="!vm.stats.isSynced">
+            {{ vm.stats.isSynced ? 'Synced' : 'Syncing' }}
+          </p>
+          <span class="metric-label">consensus</span>
         </article>
       </section>
 
@@ -101,7 +115,7 @@ const DEGRADED_TPS_THRESHOLD = 1;
       <section class="validators__consensus" aria-label="Consensus status">
         <div class="section-heading">
           <h2>Consensus Status</h2>
-          <p class="muted">Bullshark aBFT consensus health indicators</p>
+          <p class="muted">Crystallite/Alluvium aBFT consensus health indicators</p>
         </div>
 
         <div class="consensus-grid">
@@ -113,10 +127,64 @@ const DEGRADED_TPS_THRESHOLD = 1;
               </svg>
             </div>
             <div class="consensus-card__content">
-              <h3>Finality Lag</h3>
-              <p class="consensus-card__value">{{ toNumber(vm.stats.currentHeight) - toNumber(vm.stats.finalizedHeight) }} blocks</p>
-              <span class="consensus-card__status" [attr.data-status]="toNumber(vm.stats.currentHeight) - toNumber(vm.stats.finalizedHeight) <= 3 ? 'healthy' : 'degraded'">
-                {{ toNumber(vm.stats.currentHeight) - toNumber(vm.stats.finalizedHeight) <= 3 ? 'Normal' : 'Elevated' }}
+              <h3>DAG Finality Gap</h3>
+              <p class="consensus-card__value">{{ vm.stats.dagFinalityGap }} commits</p>
+              <span class="consensus-card__status" [attr.data-status]="vm.stats.dagFinalityGap <= 3 ? 'healthy' : 'degraded'">
+                {{ vm.stats.dagFinalityGap <= 3 ? 'Normal' : 'Elevated' }}
+              </span>
+            </div>
+          </article>
+
+          <article class="consensus-card">
+            <div class="consensus-card__icon consensus-card__icon--dag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <circle cx="4" cy="6" r="2"></circle>
+                <circle cx="20" cy="6" r="2"></circle>
+                <circle cx="4" cy="18" r="2"></circle>
+                <circle cx="20" cy="18" r="2"></circle>
+                <line x1="6" y1="6" x2="9" y2="10"></line>
+                <line x1="18" y1="6" x2="15" y2="10"></line>
+                <line x1="6" y1="18" x2="9" y2="14"></line>
+                <line x1="18" y1="18" x2="15" y2="14"></line>
+              </svg>
+            </div>
+            <div class="consensus-card__content">
+              <h3>DAG Tip Index</h3>
+              <p class="consensus-card__value">{{ vm.stats.dagTipCommitIndex | number }}</p>
+              <span class="consensus-card__status" data-status="healthy">Latest</span>
+            </div>
+          </article>
+
+          <article class="consensus-card">
+            <div class="consensus-card__icon consensus-card__icon--commit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                <path d="M2 17l10 5 10-5"></path>
+                <path d="M2 12l10 5 10-5"></path>
+              </svg>
+            </div>
+            <div class="consensus-card__content">
+              <h3>Finalized Commit</h3>
+              <p class="consensus-card__value">{{ vm.stats.finalizedCommitIndex | number }}</p>
+              <span class="consensus-card__status" data-status="healthy">Committed</span>
+            </div>
+          </article>
+
+          <article class="consensus-card">
+            <div class="consensus-card__icon consensus-card__icon--queue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="7" y1="8" x2="17" y2="8"></line>
+                <line x1="7" y1="12" x2="17" y2="12"></line>
+                <line x1="7" y1="16" x2="13" y2="16"></line>
+              </svg>
+            </div>
+            <div class="consensus-card__content">
+              <h3>Tx Queue Size</h3>
+              <p class="consensus-card__value">{{ vm.stats.txQueueSize }}</p>
+              <span class="consensus-card__status" [attr.data-status]="vm.stats.txQueueSize < 100 ? 'healthy' : 'degraded'">
+                {{ vm.stats.txQueueSize < 100 ? 'Normal' : 'Congested' }}
               </span>
             </div>
           </article>
@@ -150,6 +218,24 @@ const DEGRADED_TPS_THRESHOLD = 1;
               <p class="consensus-card__value">{{ vm.stats.activeValidators }} validators</p>
               <span class="consensus-card__status" [attr.data-status]="vm.stats.activeValidators >= 4 ? 'healthy' : 'degraded'">
                 {{ vm.stats.activeValidators >= 4 ? 'Quorum met' : 'Below quorum' }}
+              </span>
+            </div>
+          </article>
+
+          <article class="consensus-card">
+            <div class="consensus-card__icon consensus-card__icon--pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+            </div>
+            <div class="consensus-card__content">
+              <h3>Pending Certs</h3>
+              <p class="consensus-card__value">{{ vm.stats.pendingFinalityCerts }}</p>
+              <span class="consensus-card__status" [attr.data-status]="vm.stats.pendingFinalityCerts < 10 ? 'healthy' : 'degraded'">
+                {{ vm.stats.pendingFinalityCerts < 10 ? 'Normal' : 'High' }}
               </span>
             </div>
           </article>
@@ -390,6 +476,8 @@ const DEGRADED_TPS_THRESHOLD = 1;
       .metric-card--teal::before { background: linear-gradient(180deg, #14b8a6, #0d9488); }
       .metric-card--green::before { background: linear-gradient(180deg, #22c55e, #16a34a); }
       .metric-card--emerald::before { background: linear-gradient(180deg, #10b981, #059669); }
+      .metric-card--purple::before { background: linear-gradient(180deg, #a855f7, #7c3aed); }
+      .metric-card--orange::before { background: linear-gradient(180deg, #f97316, #ea580c); }
 
       .metric-card h2 {
         font-size: var(--metric-label-size);
@@ -408,6 +496,16 @@ const DEGRADED_TPS_THRESHOLD = 1;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+      }
+
+      .metric-value.synced {
+        color: #22c55e !important;
+        -webkit-text-fill-color: #22c55e;
+      }
+
+      .metric-value.syncing {
+        color: #f59e0b !important;
+        -webkit-text-fill-color: #f59e0b;
       }
 
       .metric-label {
@@ -493,6 +591,26 @@ const DEGRADED_TPS_THRESHOLD = 1;
       .consensus-card__icon--election {
         background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.1));
         color: #a855f7;
+      }
+
+      .consensus-card__icon--dag {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(99, 102, 241, 0.1));
+        color: #6366f1;
+      }
+
+      .consensus-card__icon--commit {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1));
+        color: #22c55e;
+      }
+
+      .consensus-card__icon--queue {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.1));
+        color: #f59e0b;
+      }
+
+      .consensus-card__icon--pending {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+        color: #ef4444;
       }
 
       .consensus-card__content {
@@ -786,7 +904,7 @@ export class ValidatorsPageComponent implements OnInit {
     return `${mins}m`;
   }
 
-  private buildViewModel(stats: NetworkStatistics, blocks: readonly BlockSummary[]): ValidatorsViewModel {
+  private buildViewModel(stats: ExtendedNetworkStatistics, blocks: readonly BlockSummary[]): ValidatorsViewModel {
     assert(stats !== undefined, 'Network stats must be defined');
 
     // Extract unique validators from block data

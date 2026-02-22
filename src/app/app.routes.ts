@@ -15,6 +15,7 @@ import { EventsPageComponent } from '@app/events/events-page.component';
 import { AnalyticsPageComponent } from '@app/analytics/analytics-page.component';
 import { ParamsPageComponent } from '@app/chain/params-page.component';
 import { BridgePageComponent } from '@app/bridge/bridge-page.component';
+import { AlertsPageComponent } from '@app/alerts/alerts-page.component';
 
 export const APP_ROUTES: Routes = [
   {
@@ -24,6 +25,10 @@ export const APP_ROUTES: Routes = [
   {
     path: 'network',
     component: ValidatorsPageComponent
+  },
+  {
+    path: 'alerts',
+    component: AlertsPageComponent
   },
   {
     path: 'staking',

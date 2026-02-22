@@ -473,6 +473,7 @@ export class ExplorerHeaderComponent {
       label: 'Network',
       items: [
         { label: 'Overview', route: '/network' },
+        { label: 'Alerts', route: '/alerts' },
         { label: 'Analytics', route: '/analytics' },
         { label: 'Chain Params', route: '/chain-params' },
         { label: 'Governance', route: '/governance' },
