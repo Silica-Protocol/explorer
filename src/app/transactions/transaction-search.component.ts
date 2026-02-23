@@ -61,7 +61,7 @@ import type { GetTransactionResult as NodeGetTransactionResult } from '@silica-p
           </article>
           <article *ngIf="result.fee !== undefined">
             <h3>Fee</h3>
-            <p>{{ result.fee }}</p>
+            <p>{{ result.fee }} SILICA</p>
           </article>
           <article *ngIf="result.nonce !== undefined">
             <h3>Nonce</h3>
@@ -240,6 +240,12 @@ export class TransactionSearchComponent {
       return;
     }
 
+    if (!this.isLikelyTransactionId(hash)) {
+      this.error = 'Enter a valid transaction ID (GUID or 64-char hash).';
+      this.result = null;
+      return;
+    }
+
     this.loading = true;
     this.error = null;
     this.result = null;
@@ -254,5 +260,11 @@ export class TransactionSearchComponent {
     } finally {
       this.loading = false;
     }
+  }
+
+  private isLikelyTransactionId(value: string): boolean {
+    const trimmed = value.trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)
+      || /^(?:0x)?[0-9a-f]{64}$/i.test(trimmed);
   }
 }

@@ -24,6 +24,10 @@ const TERM_MAX_LENGTH = 64;
 const SEARCH_DEBOUNCE_MS = 80;
 const CLOSE_DELAY_MS = 120;
 
+const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HEX_64_REGEX = /^(?:0x)?[0-9a-f]{64}$/i;
+const ADDRESS_REGEX = /^(?:0x[0-9a-f]{40}|[a-z][a-z0-9_-]{2,}_[a-z0-9_-]{6,})$/i;
+
 @Component({
   selector: 'explorer-search',
   standalone: true,
@@ -242,11 +246,36 @@ export class ExplorerSearchComponent implements OnDestroy {
 
   private async searchFromNode(term: string, localResults: SearchResultItem[]): Promise<SearchResultItem[]> {
     const results = [...localResults];
+    const remaining = MAX_RESULTS - results.length;
+    if (remaining <= 0) {
+      return results;
+    }
+
+    const isNumeric = this.isNumericTerm(term);
+    const isGuid = this.isGuidTerm(term);
+    const isHash = this.isHexHashTerm(term);
+    const isAddress = this.isAddressLikeTerm(term);
+
+    // Avoid irrelevant RPC calls:
+    // - numeric terms are block heights
+    // - GUID-like terms are tx IDs
+    // - hash-like terms are block hashes on current network
+    // - address-like terms should not trigger block/tx hash lookups
+    const shouldQueryBlocks = isNumeric || isHash;
+    const shouldQueryTransactions = isGuid;
+
+    if (!shouldQueryBlocks && !shouldQueryTransactions) {
+      return results;
+    }
+
+    if (isAddress) {
+      return results;
+    }
 
     try {
       const [nodeBlocks, nodeTxs] = await Promise.all([
-        this.data.searchBlocks(term, MAX_RESULTS - results.length),
-        this.data.searchTransactions(term, MAX_RESULTS - results.length)
+        shouldQueryBlocks ? this.data.searchBlocks(term, remaining) : Promise.resolve([]),
+        shouldQueryTransactions ? this.data.searchTransactions(term, remaining) : Promise.resolve([])
       ]);
 
       for (const block of nodeBlocks) {
@@ -341,8 +370,11 @@ export class ExplorerSearchComponent implements OnDestroy {
     assert(viewModel !== undefined, 'Search view model must be defined');
     const directTerm = viewModel.term.trim();
     if (viewModel.results.length === 0) {
-      if (/^\d+$/.test(directTerm) || /^[0-9a-f]{16,}$/i.test(directTerm) || /^0x[0-9a-f]{16,}$/i.test(directTerm)) {
+      if (this.isNumericTerm(directTerm) || this.isHexHashTerm(directTerm)) {
         void this.router.navigate(['/block', directTerm]);
+        this.close();
+      } else if (this.isGuidTerm(directTerm)) {
+        void this.router.navigate(['/transaction', directTerm]);
         this.close();
       }
       return;
@@ -517,5 +549,21 @@ export class ExplorerSearchComponent implements OnDestroy {
     assert(Number.isFinite(normalized), 'Formatted value must be finite');
     assert(normalized >= 0, 'Formatted coin value cannot be negative');
     return normalized.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  }
+
+  private isNumericTerm(term: string): boolean {
+    return /^\d+$/.test(term.trim());
+  }
+
+  private isGuidTerm(term: string): boolean {
+    return GUID_REGEX.test(term.trim());
+  }
+
+  private isHexHashTerm(term: string): boolean {
+    return HEX_64_REGEX.test(term.trim());
+  }
+
+  private isAddressLikeTerm(term: string): boolean {
+    return ADDRESS_REGEX.test(term.trim());
   }
 }

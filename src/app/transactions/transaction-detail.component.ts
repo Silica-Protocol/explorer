@@ -39,7 +39,7 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
             </span>
             <span class="tx-row__item">
               <span class="tx-row__label">Fee</span>
-              <span class="tx-row__value">{{ formatCoins(transaction.fee) }} CHRT</span>
+              <span class="tx-row__value">{{ formatCoins(transaction.fee) }} SILICA</span>
             </span>
             <span class="tx-row__item">
               <span class="tx-row__label">Timestamp</span>

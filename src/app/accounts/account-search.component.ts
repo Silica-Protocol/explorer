@@ -294,6 +294,11 @@ export class AccountSearchComponent {
       return;
     }
 
+    if (!this.isLikelyAccountAddress(address)) {
+      this.error = 'Enter a valid account address (0x… or named account format).';
+      return;
+    }
+
     await this.loadAddress(address, true);
   }
 
@@ -343,5 +348,10 @@ export class AccountSearchComponent {
       return (numeric / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 });
     }
     return value;
+  }
+
+  private isLikelyAccountAddress(value: string): boolean {
+    const trimmed = value.trim();
+    return /^(?:0x[0-9a-f]{40}|[a-z][a-z0-9_-]{2,}_[a-z0-9_-]{6,})$/i.test(trimmed);
   }
 }

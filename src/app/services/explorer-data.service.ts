@@ -321,6 +321,10 @@ export class ExplorerDataService implements OnDestroy {
       return [];
     }
 
+    if (!this.isLikelyBlockLookup(trimmed)) {
+      return [];
+    }
+
     const numericQuery = /^\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : null;
 
     try {
@@ -348,6 +352,10 @@ export class ExplorerDataService implements OnDestroy {
   async searchTransactions(query: string, limit: number = 10): Promise<readonly TransactionDetails[]> {
     const trimmed = query.trim();
     if (trimmed.length === 0) {
+      return [];
+    }
+
+    if (!this.isLikelyTransactionLookup(trimmed)) {
       return [];
     }
 
@@ -1980,5 +1988,19 @@ export class ExplorerDataService implements OnDestroy {
     }
 
     return [];
+  }
+
+  private isLikelyBlockLookup(term: string): boolean {
+    const trimmed = term.trim();
+    const isNumeric = /^\d+$/.test(trimmed);
+    const isHash = /^(?:0x)?[0-9a-f]{64}$/i.test(trimmed);
+    return isNumeric || isHash;
+  }
+
+  private isLikelyTransactionLookup(term: string): boolean {
+    const trimmed = term.trim();
+    const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed);
+    const isHash = /^(?:0x)?[0-9a-f]{64}$/i.test(trimmed);
+    return isGuid || isHash;
   }
 }

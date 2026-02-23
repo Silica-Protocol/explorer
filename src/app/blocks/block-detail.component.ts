@@ -87,7 +87,7 @@ type BlockHash = BlockDetails['hash'];
                 <span role="cell">{{ formatHash(tx.from) }}</span>
                 <span role="cell">{{ formatHash(tx.to) }}</span>
                 <span role="cell">{{ formatCoins(tx.value) }} CHRT</span>
-                <span role="cell">{{ formatCoins(tx.fee) }} CHRT</span>
+                <span role="cell">{{ formatCoins(tx.fee) }} SILICA</span>
               </a>
             </div>
           </section>
