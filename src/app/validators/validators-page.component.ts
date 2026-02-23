@@ -40,6 +40,23 @@ interface ValidatorsViewModel {
 
 const MAX_VALIDATORS = 128;
 
+const NODE_URLS = [
+  { id: '0', url: 'https://rpc0.testnet.silicaprotocol.network', label: 'Node 0' },
+  { id: '1', url: 'https://rpc1.testnet.silicaprotocol.network', label: 'Node 1' },
+  { id: '2', url: 'https://rpc2.testnet.silicaprotocol.network', label: 'Node 2' },
+  { id: '3', url: 'https://rpc3.testnet.silicaprotocol.network', label: 'Node 3' },
+];
+
+interface NodeHealth {
+  url: string;
+  label: string;
+  healthy: boolean;
+  latencyMs: number;
+  version: string;
+  height: number;
+  peers: number;
+}
+
 @Component({
   selector: 'validators-page',
   standalone: true,
@@ -51,6 +68,22 @@ const MAX_VALIDATORS = 128;
           <h1 id="validators-heading">Network Overview</h1>
           <p class="validators__subtitle">Real-time network health, validators, and connected peers.</p>
         </div>
+        
+        <div class="validators__node-selector">
+          <label for="node-select" class="node-selector__label">Node:</label>
+          <select id="node-select" class="node-selector__dropdown" (change)="onNodeChange($event)">
+            <option *ngFor="let node of nodeUrls" [value]="node.url" [selected]="selectedNodeUrl === node.url">
+              {{ node.label }}
+            </option>
+          </select>
+          <span class="node-selector__status" [class.online]="selectedNodeHealth?.healthy" [class.offline]="!selectedNodeHealth?.healthy">
+            {{ selectedNodeHealth?.healthy ? '● Online' : '○ Offline' }}
+          </span>
+          <span class="node-selector__latency" *ngIf="selectedNodeHealth?.healthy">
+            {{ selectedNodeHealth.latencyMs }}ms
+          </span>
+        </div>
+
         <div class="validators__health" [attr.data-status]="vm.networkHealth">
           <span class="validators__health-dot" aria-hidden="true"></span>
           <span>{{ vm.networkHealth | titlecase }}</span>
@@ -449,6 +482,65 @@ const MAX_VALIDATORS = 128;
         justify-content: space-between;
         gap: 1.5rem;
         align-items: center;
+      }
+
+      .validators__node-selector {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .node-selector__label {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+      }
+
+      .node-selector__dropdown {
+        appearance: none;
+        background: rgba(14, 165, 233, 0.08);
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        color: var(--text-primary);
+        padding: 0.5rem 2rem 0.5rem 0.75rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%230ea5e9' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.6rem center;
+        transition: all 0.2s ease;
+      }
+
+      .node-selector__dropdown:hover {
+        border-color: rgba(14, 165, 233, 0.4);
+        background-color: rgba(14, 165, 233, 0.12);
+      }
+
+      .node-selector__dropdown:focus {
+        outline: none;
+        border-color: rgba(14, 165, 233, 0.5);
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+      }
+
+      .node-selector__status {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+      }
+
+      .node-selector__status.online {
+        color: #22c55e;
+        background: rgba(34, 197, 94, 0.1);
+      }
+
+      .node-selector__status.offline {
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+      }
+
+      .node-selector__latency {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        font-family: 'JetBrains Mono', monospace;
       }
 
       h1 {
@@ -1004,7 +1096,13 @@ export class ValidatorsPageComponent implements OnInit {
     private readonly cdr: ChangeDetectorRef
   ) {}
 
+  readonly nodeUrls = NODE_URLS;
+  selectedNodeUrl = NODE_URLS[0].url;
+  selectedNodeHealth: NodeHealth | null = null;
+  nodeHealthMap: Map<string, NodeHealth> = new Map();
+
   async ngOnInit(): Promise<void> {
+    await this.checkAllNodesHealth();
     try {
       const nodesData = await this.data.fetchNodes();
       this.nodes = nodesData.map(n => ({
@@ -1020,6 +1118,59 @@ export class ValidatorsPageComponent implements OnInit {
       console.warn('Failed to load nodes:', err);
       this.nodes = [];
     }
+    this.cdr.detectChanges();
+  }
+
+  async checkAllNodesHealth(): Promise<void> {
+    for (const node of NODE_URLS) {
+      const health = await this.checkNodeHealth(node.url);
+      const nodeHealth: NodeHealth = {
+        url: node.url,
+        label: node.label,
+        ...health
+      };
+      this.nodeHealthMap.set(node.url, nodeHealth);
+      if (node.url === this.selectedNodeUrl) {
+        this.selectedNodeHealth = nodeHealth;
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  private async checkNodeHealth(nodeUrl: string): Promise<{ healthy: boolean; latencyMs: number; version: string; height: number; peers: number }> {
+    const start = performance.now();
+    try {
+      const response = await fetch(`${nodeUrl}/jsonrpc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'health',
+          params: {},
+          id: 1
+        })
+      });
+      const latencyMs = Math.round(performance.now() - start);
+      if (!response.ok) {
+        return { healthy: false, latencyMs, version: '', height: 0, peers: 0 };
+      }
+      const data = await response.json();
+      return {
+        healthy: true,
+        latencyMs,
+        version: data.result?.version || '',
+        height: data.result?.block_height || data.result?.height || 0,
+        peers: data.result?.network?.peerCount || data.result?.peers || 0
+      };
+    } catch {
+      return { healthy: false, latencyMs: Math.round(performance.now() - start), version: '', height: 0, peers: 0 };
+    }
+  }
+
+  onNodeChange(event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    this.selectedNodeUrl = select.value;
+    this.selectedNodeHealth = this.nodeHealthMap.get(select.value) || null;
     this.cdr.detectChanges();
   }
 
