@@ -1339,7 +1339,11 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   private toUnixMsFromRfc3339(timestamp: string): UnixMs {
-    const ms = Date.parse(timestamp);
+    let ms = Date.parse(timestamp);
+    if (!Number.isFinite(ms)) {
+      const normalized = timestamp.replace(/\.(\d{3})\d+Z$/, '.$1Z');
+      ms = Date.parse(normalized);
+    }
     assert(Number.isFinite(ms), 'Invalid RFC3339 timestamp');
     return this.toUnixMs(ms);
   }
@@ -1357,20 +1361,39 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   private nodeToExplorerTx(block: NodeBlock, tx: NodeTransaction): TransactionDetails {
+    const raw = tx as unknown as Record<string, unknown>;
     const blockHash = block.block_hash as Hash;
     const height = this.toPositiveInteger(block.block_number);
-    const timestamp = this.toUnixMsFromRfc3339(tx.timestamp);
+    const timestampStr = typeof raw['timestamp'] === 'string' ? raw['timestamp'] : block.timestamp;
+    const timestamp = this.toUnixMsFromRfc3339(timestampStr);
+
+    const senderRaw = typeof raw['sender'] === 'string' ? raw['sender'] : '';
+    const outputs = Array.isArray(raw['outputs']) ? raw['outputs'] as Array<Record<string, unknown>> : [];
+    const firstOutput = outputs[0];
+    const recipientRaw = typeof raw['recipient'] === 'string'
+      ? raw['recipient']
+      : (typeof firstOutput?.['recipient'] === 'string' ? firstOutput['recipient'] as string : senderRaw);
+
+    const amountFromField = typeof raw['amount'] === 'number' ? raw['amount'] : undefined;
+    const amountFromOutputs = outputs.reduce((sum: number, output: Record<string, unknown>) => {
+      const value = output['amount'];
+      return sum + (typeof value === 'number' ? value : 0);
+    }, 0);
+    const amount = amountFromField ?? amountFromOutputs;
+
+    const fee = typeof raw['fee'] === 'number' ? raw['fee'] : 0;
+    const txId = typeof raw['tx_id'] === 'string' ? raw['tx_id'] : '';
 
     const confirmations = Math.max(0, this.nodeLatestHeight - block.block_number);
 
     return {
-      hash: tx.tx_id as Hash,
+      hash: txId as Hash,
       blockHash,
       blockHeight: height,
-      from: this.nodeAddressToAccountAddress(tx.sender, 'tx.sender'),
-      to: this.nodeAddressToAccountAddress(tx.recipient, 'tx.recipient'),
-      value: this.toAttoValue(tx.amount),
-      fee: this.toAttoValue(tx.fee),
+      from: this.nodeAddressToAccountAddress(senderRaw as NodeAddress, 'tx.sender'),
+      to: this.nodeAddressToAccountAddress(recipientRaw as NodeAddress, 'tx.recipient'),
+      value: this.toAttoValue(amount),
+      fee: this.toAttoValue(fee),
       timestamp,
       status: 'confirmed',
       inputs: [],
