@@ -80,7 +80,7 @@ interface NodeHealth {
             {{ selectedNodeHealth?.healthy ? '● Online' : '○ Offline' }}
           </span>
           <span class="node-selector__latency" *ngIf="selectedNodeHealth?.healthy">
-            {{ selectedNodeHealth.latencyMs }}ms
+            {{ selectedNodeHealth?.latencyMs }}ms
           </span>
         </div>
 
