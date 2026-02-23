@@ -365,7 +365,12 @@ export class ExplorerDataService implements OnDestroy {
     try {
       const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByHash', { block_hash: trimmed, include_txs: true });
       if (result) {
-        return this.nodeToExplorerBlock(result);
+        const details = this.nodeToExplorerBlock(result);
+        this.blockDetails.set(details.hash, details);
+        for (const tx of details.transactions) {
+          this.transactionDetails.set(tx.hash, tx as TransactionDetails);
+        }
+        return details;
       }
       return null;
     } catch (e) {
@@ -378,7 +383,12 @@ export class ExplorerDataService implements OnDestroy {
     try {
       const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByNumber', { block_number: blockNumber, include_txs: true });
       if (result) {
-        return this.nodeToExplorerBlock(result);
+        const details = this.nodeToExplorerBlock(result);
+        this.blockDetails.set(details.hash, details);
+        for (const tx of details.transactions) {
+          this.transactionDetails.set(tx.hash, tx as TransactionDetails);
+        }
+        return details;
       }
       return null;
     } catch (e) {
@@ -390,13 +400,18 @@ export class ExplorerDataService implements OnDestroy {
   private convertBlocksToSummaries(blocks: readonly NodeBlock[]): BlockSummary[] {
     return blocks.map(block => {
       const height = this.toPositiveInteger(block.block_number);
+      const transactions = this.getNodeBlockTransactions(block);
+      const transactionCount = this.getNodeBlockTransactionCount(block, transactions);
+      const totalValue = this.toAttoValue(
+        transactions.reduce((sum: number, tx: NodeTransaction) => sum + (Number(tx.amount) || 0), 0)
+      );
       return {
         height,
         hash: block.block_hash as Hash,
         parentHash: block.previous_block_hash as Hash | null,
         timestamp: this.toUnixMsFromRfc3339(block.timestamp),
-        transactionCount: block.transactions.length,
-        totalValue: this.toAttoValue(0) as AttoValue,
+        transactionCount,
+        totalValue,
         status: 'pending' as const,
         confirmationScore: 0,
         miner: this.nodeAddressToAccountAddress(block.validator_address, 'validator'),
@@ -1313,9 +1328,7 @@ export class ExplorerDataService implements OnDestroy {
     assert(typeof raw === 'string', `${label} must be a string`);
     assert(raw.trim().length > 0, `${label} must not be empty`);
 
-    // Current testnet uses hex 0x-addresses; keep validation permissive but helpful.
-    // If we ever support other address formats, relax/extend this.
-    assert(/^0x[0-9a-fA-F]{40}$/.test(raw), `${label} must be a 0x-prefixed 20-byte hex address`);
+    // Address format depends on network; keep this validation permissive.
 
     return raw as unknown as AccountAddress;
   }
@@ -1349,9 +1362,11 @@ export class ExplorerDataService implements OnDestroy {
     const parentHash = (block.previous_block_hash || null) as Hash | null;
     const timestamp = this.toUnixMsFromRfc3339(block.timestamp);
 
-    const txDetails = block.transactions.map((tx: NodeTransaction) => this.nodeToExplorerTx(block, tx));
+    const blockTransactions = this.getNodeBlockTransactions(block);
+    const txDetails = blockTransactions.map((tx: NodeTransaction) => this.nodeToExplorerTx(block, tx));
     const txSummaries = txDetails.map((tx: TransactionDetails) => tx as TransactionSummary);
     const totalValue = this.computeTotalValue(txSummaries as TransactionSummary[]);
+    const transactionCount = this.getNodeBlockTransactionCount(block, blockTransactions);
 
     const confirmations = Math.max(0, this.nodeLatestHeight - block.block_number);
     const confirmationScore = this.config.finalityLag > 0 ? Math.min(1, confirmations / this.config.finalityLag) : 0;
@@ -1362,7 +1377,7 @@ export class ExplorerDataService implements OnDestroy {
       hash,
       parentHash,
       timestamp,
-      transactionCount: txSummaries.length,
+      transactionCount,
       totalValue,
       status,
       confirmationScore,
@@ -1395,7 +1410,8 @@ export class ExplorerDataService implements OnDestroy {
     try {
       const [result, health] = await Promise.all([
         this.jsonRpcCall<NodeGetBlocksResult>('get_blocks', {
-          limit: this.config.blockPageSize
+          limit: this.config.blockPageSize,
+          include_txs: true
         }),
         // Best-effort health fetch for network-wide metadata (validator counts, peers, etc).
         // Keep this optional so explorer still works against older nodes/proxies.
@@ -1443,7 +1459,7 @@ export class ExplorerDataService implements OnDestroy {
       const newSummaries = newBlockDetails.map(b => this.toSummary(b));
       const mergedBlocks = [...newSummaries, ...existingBlocks].sort((a, b) => (b.height as number) - (a.height as number));
 
-      this.blocksSubject.next(mergedBlocks);
+      this.setNodeBlocks(mergedBlocks);
       this.hasMoreBlocksSubject.next(this.nodeBlocksCursor !== undefined);
 
       // Update finality status for all blocks
@@ -1600,7 +1616,8 @@ export class ExplorerDataService implements OnDestroy {
     try {
       const result = await this.jsonRpcCall<NodeGetBlocksResult>('get_blocks', {
         from_height: this.nodeBlocksCursor,
-        limit: this.config.blockPageSize
+        limit: this.config.blockPageSize,
+        include_txs: true
       });
 
       if (!result.blocks || result.blocks.length === 0) {
@@ -1630,7 +1647,8 @@ export class ExplorerDataService implements OnDestroy {
 
       const summaries = blockDetails.map((b) => this.toSummary(b));
       const currentBlocks = this.blocksSubject.getValue();
-      this.blocksSubject.next([...currentBlocks, ...summaries]);
+      const mergedBlocks = [...currentBlocks, ...summaries].sort((a, b) => (b.height as number) - (a.height as number));
+      this.setNodeBlocks(mergedBlocks);
 
       if (!result.next_cursor) {
         this.nodeBlocksCursor = undefined;
@@ -1653,6 +1671,67 @@ export class ExplorerDataService implements OnDestroy {
 
   get loadingMoreBlocks$(): Observable<boolean> {
     return this.loadingMoreBlocksSubject.asObservable();
+  }
+
+  private setNodeBlocks(blocks: readonly BlockSummary[]): void {
+    const retained = this.retainNodeBlocks(blocks);
+    const retainedHashes = new Set(retained.map((block) => block.hash));
+    const current = this.blocksSubject.getValue();
+
+    for (const block of current) {
+      if (!retainedHashes.has(block.hash)) {
+        this.evictBlockData(block.hash);
+      }
+    }
+
+    this.blocksSubject.next(retained);
+  }
+
+  private retainNodeBlocks(blocks: readonly BlockSummary[]): readonly BlockSummary[] {
+    const deduped: BlockSummary[] = [];
+    const seen = new Set<Hash>();
+
+    for (const block of blocks) {
+      if (seen.has(block.hash)) {
+        continue;
+      }
+      seen.add(block.hash);
+      deduped.push(block);
+    }
+
+    if (deduped.length <= this.config.maxBlocks) {
+      return deduped;
+    }
+
+    const blocksWithTransactions: BlockSummary[] = [];
+    const emptyBlocks: BlockSummary[] = [];
+
+    for (const block of deduped) {
+      if (Number(block.transactionCount) > 0) {
+        blocksWithTransactions.push(block);
+      } else {
+        emptyBlocks.push(block);
+      }
+    }
+
+    if (blocksWithTransactions.length >= this.config.maxBlocks) {
+      return blocksWithTransactions.slice(0, this.config.maxBlocks);
+    }
+
+    const keepEmptyCount = this.config.maxBlocks - blocksWithTransactions.length;
+    return [...blocksWithTransactions, ...emptyBlocks.slice(0, keepEmptyCount)];
+  }
+
+  private evictBlockData(blockHash: Hash): void {
+    const details = this.blockDetails.get(blockHash);
+    if (details) {
+      details.transactions.forEach((tx: TransactionSummary) => {
+        this.transactionDetails.delete(tx.hash);
+      });
+      this.removeTransactionsFromLatest(details.transactions);
+    }
+    this.blockDetails.delete(blockHash);
+    this.trimAccountsForRemovedBlock(blockHash);
   }
 
   private trimAccountsForRemovedBlock(hash: Hash): void {
@@ -1743,5 +1822,23 @@ export class ExplorerDataService implements OnDestroy {
     assert(Number.isFinite(value), 'UnixMs must be finite');
     assert(value >= 0, 'UnixMs must be non-negative');
     return Math.trunc(value) as UnixMs;
+  }
+
+  private getNodeBlockTransactions(block: NodeBlock): readonly NodeTransaction[] {
+    const maybeTransactions = (block as unknown as { transactions?: unknown }).transactions;
+    if (Array.isArray(maybeTransactions)) {
+      return maybeTransactions as readonly NodeTransaction[];
+    }
+    return [];
+  }
+
+  private getNodeBlockTransactionCount(block: NodeBlock, transactions: readonly NodeTransaction[]): number {
+    const maybeCount = (block as unknown as { transaction_count?: unknown; tx_count?: unknown }).transaction_count
+      ?? (block as unknown as { tx_count?: unknown }).tx_count;
+
+    if (typeof maybeCount === 'number' && Number.isFinite(maybeCount) && maybeCount >= 0) {
+      return Math.trunc(maybeCount);
+    }
+    return transactions.length;
   }
 }

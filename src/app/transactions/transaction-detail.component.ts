@@ -376,7 +376,7 @@ export class TransactionDetailComponent {
   }
 
   formatCoins(value: AttoValue): string {
-    const normalized = (value as number) / 1_000_000;
-    return normalized.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    const normalized = Number(value);
+    return normalized.toLocaleString(undefined, { maximumFractionDigits: 6 });
   }
 }

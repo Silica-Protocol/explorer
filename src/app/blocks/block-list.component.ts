@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-models';
@@ -8,7 +9,7 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
 @Component({
   selector: 'block-list',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, ReactiveFormsModule],
   template: `
     <div class="block-list" role="table" aria-label="Recent blocks">
       <div class="block-list__header" role="row">
@@ -18,6 +19,17 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
         <span role="columnheader">Status</span>
         <span role="columnheader">Validator</span>
         <span role="columnheader">Time</span>
+        <span class="block-search" role="none">
+          <form class="block-search__form" (submit)="onSearchSubmit($event)">
+            <input
+              type="text"
+              [formControl]="blockSearchControl"
+              placeholder="Block # or hash"
+              aria-label="Search block by height or hash"
+            />
+            <button type="submit">Go</button>
+          </form>
+        </span>
         <span class="filter-toggle">
           <label class="filter-toggle__label">
             <input
@@ -100,6 +112,36 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
 
       .filter-toggle {
         justify-self: end;
+      }
+
+      .block-search {
+        justify-self: end;
+      }
+
+      .block-search__form {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+
+      .block-search__form input {
+        width: min(240px, 34vw);
+        padding: 0.35rem 0.55rem;
+        border-radius: 8px;
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        background: rgba(14, 165, 233, 0.05);
+        color: var(--text-primary);
+        font-size: 0.8rem;
+      }
+
+      .block-search__form button {
+        padding: 0.35rem 0.7rem;
+        border-radius: 8px;
+        border: 1px solid rgba(14, 165, 233, 0.35);
+        background: rgba(14, 165, 233, 0.12);
+        color: var(--accent-light);
+        font-size: 0.78rem;
+        cursor: pointer;
       }
 
       .filter-toggle__label {
@@ -235,6 +277,10 @@ import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-model
         .filter-toggle {
           display: none;
         }
+
+        .block-search {
+          display: none;
+        }
       }
     `
   ],
@@ -244,9 +290,10 @@ export class BlockListComponent {
   readonly blocks$: Observable<readonly BlockSummary[]> = this.data.blocks$;
   readonly hasMore$ = this.data.hasMoreBlocks$;
   readonly loadingMore$ = this.data.loadingMoreBlocks$;
+  readonly blockSearchControl = new FormControl('', { nonNullable: true });
   hideEmptyBlocks = false;
 
-  constructor(private readonly data: ExplorerDataService) {}
+  constructor(private readonly data: ExplorerDataService, private readonly router: Router) {}
 
   async loadMore(): Promise<void> {
     await this.data.loadMoreBlocks();
@@ -258,7 +305,16 @@ export class BlockListComponent {
 
   getFilteredBlocks(blocks: readonly BlockSummary[] | null): readonly BlockSummary[] {
     if (!blocks) return [];
-    return this.hideEmptyBlocks ? blocks.filter(b => b.transactionCount > 0) : blocks;
+    return this.hideEmptyBlocks ? blocks.filter((b) => Number(b.transactionCount) > 0) : blocks;
+  }
+
+  onSearchSubmit(event: Event): void {
+    event.preventDefault();
+    const term = this.blockSearchControl.value.trim();
+    if (!term) {
+      return;
+    }
+    void this.router.navigate(['/block', term]);
   }
 
   formatHash(hash: Hash): string {

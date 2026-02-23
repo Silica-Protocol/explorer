@@ -21,8 +21,8 @@ const DEFAULT_CONFIG: ExplorerDataConfig = {
   blockIntervalMs: 4000,
   finalityLag: 12,
   autoStart: true,
-  maxBlocks: 1024,
-  blockPageSize: 50,
+  maxBlocks: 3000,
+  blockPageSize: 100,
   accountCount: 320,
   txPerBlockMin: 6,
   txPerBlockMax: 42

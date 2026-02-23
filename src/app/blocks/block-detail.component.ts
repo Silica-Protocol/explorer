@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, ChangeDetectorRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, ParamMap, RouterModule } from '@angular/router';
-import { map, switchMap } from 'rxjs/operators';
-import { Observable } from 'rxjs';
+import { map, switchMap, catchError, startWith } from 'rxjs/operators';
+import { Observable, from, of } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import type { AttoValue } from '@shared/models/common';
 import type { BlockDetails } from '@shared/models/block.model';
@@ -301,52 +301,40 @@ type BlockHash = BlockDetails['hash'];
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BlockDetailComponent {
-  block: BlockDetails | undefined;
-  transactions: readonly TransactionSummary[] = [];
-  loading = true;
-
   readonly viewModel$: Observable<{ block: BlockDetails | undefined; transactions: readonly TransactionSummary[]; loading: boolean }> =
     this.route.paramMap.pipe(
       map((params: ParamMap) => params.get('hash')),
       switchMap((hash: string | null) => {
-        this.loading = true;
-        this.block = undefined;
-        this.transactions = [];
-        
         if (!hash) {
-          this.loading = false;
-          return this.data.blocks$.pipe(map(() => ({ block: this.block, transactions: this.transactions, loading: this.loading })));
+          return of({ block: undefined, transactions: [], loading: false });
         }
 
         const cached = this.data.getBlockDetails(hash as BlockHash);
         if (cached) {
-          this.loading = false;
-          this.block = cached;
-          this.transactions = cached.transactions ?? [];
-          return this.data.blocks$.pipe(map(() => ({ block: this.block, transactions: this.transactions, loading: this.loading })));
+          return of({ block: cached, transactions: cached.transactions ?? [], loading: false });
         }
 
-        this.loadBlock(hash);
-        return this.data.blocks$.pipe(map(() => ({ block: this.block, transactions: this.transactions, loading: this.loading })));
+        return from(this.loadBlock(hash)).pipe(
+          map((block: BlockDetails | null) => ({
+            block: block ?? undefined,
+            transactions: block?.transactions ?? [],
+            loading: false
+          })),
+          startWith({ block: undefined, transactions: [], loading: true }),
+          catchError(() => of({ block: undefined, transactions: [], loading: false }))
+        );
       })
     );
 
-  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService, private readonly cdr: ChangeDetectorRef) {}
+  constructor(private readonly route: ActivatedRoute, private readonly data: ExplorerDataService) {}
 
-  async loadBlock(hashOrNumber: string): Promise<void> {
+  async loadBlock(hashOrNumber: string): Promise<BlockDetails | null> {
     const isNumber = /^\d+$/.test(hashOrNumber);
-    
-    let block: BlockDetails | null = null;
+
     if (isNumber) {
-      block = await this.data.fetchBlockByNumber(parseInt(hashOrNumber, 10));
-    } else {
-      block = await this.data.fetchBlockByHash(hashOrNumber);
+      return await this.data.fetchBlockByNumber(parseInt(hashOrNumber, 10));
     }
-    
-    this.loading = false;
-    this.block = block ?? undefined;
-    this.transactions = block?.transactions ?? [];
-    this.cdr.detectChanges();
+    return await this.data.fetchBlockByHash(hashOrNumber);
   }
 
   trackByHash(_: number, tx: TransactionSummary): TransactionSummary['hash'] {
@@ -358,7 +346,7 @@ export class BlockDetailComponent {
   }
 
   formatCoins(value: AttoValue): string {
-    const normalized = (value as number) / 1_000_000;
-    return normalized.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    const normalized = Number(value);
+    return normalized.toLocaleString(undefined, { maximumFractionDigits: 6 });
   }
 }

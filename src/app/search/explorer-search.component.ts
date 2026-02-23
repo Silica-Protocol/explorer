@@ -273,7 +273,7 @@ export class ExplorerSearchComponent implements OnDestroy {
             type: 'transaction',
             id: tx.hash,
             title: `Transaction ${tx.hash.slice(0, 16)}…`,
-            subtitle: `${tx.hash.slice(0, 10)}… → ${tx.hash.slice(0, 10)}…`,
+            subtitle: `${tx.from.slice(0, 10)}… → ${tx.to.slice(0, 10)}…`,
             score: 5,
             route: ['/transaction', tx.hash] as const,
             highlight: tx.hash
@@ -339,7 +339,12 @@ export class ExplorerSearchComponent implements OnDestroy {
   onSubmit(event: Event, viewModel: SearchViewModel): void {
     event.preventDefault();
     assert(viewModel !== undefined, 'Search view model must be defined');
+    const directTerm = viewModel.term.trim();
     if (viewModel.results.length === 0) {
+      if (/^\d+$/.test(directTerm) || /^[0-9a-f]{16,}$/i.test(directTerm) || /^0x[0-9a-f]{16,}$/i.test(directTerm)) {
+        void this.router.navigate(['/block', directTerm]);
+        this.close();
+      }
       return;
     }
     this.navigateToResult(viewModel.results[0]);
@@ -508,9 +513,9 @@ export class ExplorerSearchComponent implements OnDestroy {
   }
 
   private formatCoins(value: AccountSummary['balance']): string {
-    const normalized = Number(value) / 1_000_000;
+    const normalized = Number(value);
     assert(Number.isFinite(normalized), 'Formatted value must be finite');
     assert(normalized >= 0, 'Formatted coin value cannot be negative');
-    return normalized.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return normalized.toLocaleString(undefined, { maximumFractionDigits: 6 });
   }
 }
