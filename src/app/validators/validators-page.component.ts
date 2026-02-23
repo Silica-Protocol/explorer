@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { combineLatest, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { ExplorerDataService, ExtendedNetworkStatistics } from '@app/services/explorer-data.service';
+import { ExplorerDataService, ExtendedNetworkStatistics, HealthData } from '@app/services/explorer-data.service';
 import type { PositiveInteger, UnixMs, Hash, CommitteeId } from '@silica-protocol/explorer-models';
 import type { BlockSummary, AccountAddress } from '@silica-protocol/explorer-models';
 import { assert } from '@shared/util/assert';
@@ -29,6 +29,7 @@ interface NodeInfo {
 
 interface ValidatorsViewModel {
   readonly stats: ExtendedNetworkStatistics;
+  readonly health: HealthData | null;
   readonly validators: readonly ValidatorInfo[];
   readonly nodes: readonly NodeInfo[];
   readonly totalStaked: number;
@@ -38,8 +39,6 @@ interface ValidatorsViewModel {
 }
 
 const MAX_VALIDATORS = 128;
-const HEALTHY_TPS_THRESHOLD = 5;
-const DEGRADED_TPS_THRESHOLD = 1;
 
 @Component({
   selector: 'validators-page',
@@ -90,6 +89,18 @@ const DEGRADED_TPS_THRESHOLD = 1;
           <span class="metric-label">nodes</span>
         </article>
 
+        <article class="metric-card metric-card--teal">
+          <h2>Committee Size</h2>
+          <p class="metric-value">{{ vm.health?.consensus?.committeeSize ?? 0 }}</p>
+          <span class="metric-label">consensus</span>
+        </article>
+
+        <article class="metric-card metric-card--cyan">
+          <h2>Connected Peers</h2>
+          <p class="metric-value">{{ vm.health?.network?.connectedPeerCount ?? vm.health?.network?.peerCount ?? 0 }}</p>
+          <span class="metric-label">network</span>
+        </article>
+
         <article class="metric-card metric-card--emerald">
           <h2>Average TPS</h2>
           <p class="metric-value">{{ vm.stats.averageTps | number:'1.1-2' }}</p>
@@ -108,6 +119,30 @@ const DEGRADED_TPS_THRESHOLD = 1;
             {{ vm.stats.isSynced ? 'Synced' : 'Syncing' }}
           </p>
           <span class="metric-label">consensus</span>
+        </article>
+
+        <article class="metric-card">
+          <h2>Node Version</h2>
+          <p class="metric-value">{{ vm.health?.version ?? 'n/a' }}</p>
+          <span class="metric-label">runtime</span>
+        </article>
+
+        <article class="metric-card">
+          <h2>Uptime</h2>
+          <p class="metric-value">{{ formatUptime(vm.health?.uptimeSeconds ?? 0) }}</p>
+          <span class="metric-label">node process</span>
+        </article>
+
+        <article class="metric-card">
+          <h2>Message Success</h2>
+          <p class="metric-value">{{ ((vm.health?.network?.messageSuccessRate ?? 0) * 100) | number:'1.0-2' }}%</p>
+          <span class="metric-label">p2p delivery</span>
+        </article>
+
+        <article class="metric-card">
+          <h2>Node Type</h2>
+          <p class="metric-value">{{ vm.health?.nodeType ?? 'unknown' }}</p>
+          <span class="metric-label">instance role</span>
         </article>
       </section>
 
@@ -253,6 +288,63 @@ const DEGRADED_TPS_THRESHOLD = 1;
               <span class="consensus-card__status" data-status="healthy">Scheduled</span>
             </div>
           </article>
+        </div>
+      </section>
+
+      <!-- Startup Gate / Peer Readiness -->
+      <section class="validators__startup" aria-label="Startup readiness" *ngIf="vm.health as health">
+        <div class="section-heading">
+          <h2>Startup Readiness</h2>
+          <p class="muted">Peer readiness and startup gate state from node health telemetry.</p>
+        </div>
+
+        <div class="startup-grid">
+          <article class="startup-card">
+            <h3>Startup Gate</h3>
+            <p class="startup-value" [class.startup-value--good]="!health.consensus.startupGateActive" [class.startup-value--warn]="health.consensus.startupGateActive">
+              {{ health.consensus.startupGateActive ? 'Active' : 'Open' }}
+            </p>
+          </article>
+
+          <article class="startup-card">
+            <h3>Ready Peers</h3>
+            <p class="startup-value">
+              {{ health.consensus.startupReadyPeers }} / {{ health.consensus.startupExpectedReadyPeers }}
+            </p>
+          </article>
+
+          <article class="startup-card">
+            <h3>VRF Ready Peers</h3>
+            <p class="startup-value">
+              {{ health.consensus.startupVrfReadyPeers }} / {{ health.consensus.startupExpectedVrfReadyPeers }}
+            </p>
+          </article>
+
+          <article class="startup-card">
+            <h3>Startup Wait</h3>
+            <p class="startup-value">{{ formatWaitMs(health.consensus.startupWaitMs) }}</p>
+          </article>
+        </div>
+
+        <div class="readiness-table" role="table" *ngIf="health.consensus.startupPeerReadiness.length > 0">
+          <div class="readiness-table__header" role="row">
+            <span role="columnheader">Peer</span>
+            <span role="columnheader">Status</span>
+            <span role="columnheader">Heartbeat Age</span>
+            <span role="columnheader">Commit Index</span>
+            <span role="columnheader">Blocker</span>
+          </div>
+          <div class="readiness-row" role="row" *ngFor="let peer of health.consensus.startupPeerReadiness; trackBy: trackByPeerReadiness">
+            <span role="cell" class="node-id">{{ formatNodeId(peer.peerId) }}</span>
+            <span role="cell">
+              <span class="status" [class.status--active]="peer.status.toLowerCase() === 'ready'">
+                {{ peer.status }}
+              </span>
+            </span>
+            <span role="cell">{{ formatWaitMs(peer.heartbeatAgeMs) }}</span>
+            <span role="cell">{{ peer.commitIndex | number }}</span>
+            <span role="cell">{{ peer.blocker ?? '—' }}</span>
+          </div>
         </div>
       </section>
 
@@ -651,6 +743,81 @@ const DEGRADED_TPS_THRESHOLD = 1;
         color: #f59e0b;
       }
 
+      /* Startup Readiness */
+      .validators__startup {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .startup-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .startup-card {
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        padding: 1rem;
+      }
+
+      .startup-card h3 {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .startup-value {
+        margin: 0.4rem 0 0;
+        font-size: 1.15rem;
+        font-weight: 600;
+      }
+
+      .startup-value--good {
+        color: #22c55e;
+      }
+
+      .startup-value--warn {
+        color: #f59e0b;
+      }
+
+      .readiness-table {
+        display: flex;
+        flex-direction: column;
+        border-radius: 14px;
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        overflow: hidden;
+      }
+
+      .readiness-table__header,
+      .readiness-row {
+        display: grid;
+        grid-template-columns: 1.5fr 120px 140px 120px 1fr;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        align-items: center;
+      }
+
+      .readiness-table__header {
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--panel-border);
+      }
+
+      .readiness-row {
+        border-bottom: 1px solid rgba(14, 165, 233, 0.08);
+      }
+
+      .readiness-row:last-child {
+        border-bottom: none;
+      }
+
       /* Validators Table */
       .validators__list {
         display: flex;
@@ -826,9 +993,10 @@ export class ValidatorsPageComponent implements OnInit {
 
   readonly viewModel$: Observable<ValidatorsViewModel> = combineLatest([
     this.data.networkStats$,
-    this.data.blocks$
+    this.data.blocks$,
+    this.data.health$
   ]).pipe(
-    map(([stats, blocks]) => this.buildViewModel(stats, blocks))
+    map(([stats, blocks, health]) => this.buildViewModel(stats, blocks, health))
   );
 
   constructor(
@@ -904,7 +1072,27 @@ export class ValidatorsPageComponent implements OnInit {
     return `${mins}m`;
   }
 
-  private buildViewModel(stats: ExtendedNetworkStatistics, blocks: readonly BlockSummary[]): ValidatorsViewModel {
+  formatWaitMs(ms: number): string {
+    if (ms < 1000) {
+      return `${ms}ms`;
+    }
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ${seconds % 60}s`;
+  }
+
+  trackByPeerReadiness(_: number, peer: { peerId: string }): string {
+    return peer.peerId;
+  }
+
+  private buildViewModel(
+    stats: ExtendedNetworkStatistics,
+    blocks: readonly BlockSummary[],
+    health: HealthData | null
+  ): ValidatorsViewModel {
     assert(stats !== undefined, 'Network stats must be defined');
 
     // Extract unique validators from block data
@@ -961,18 +1149,40 @@ export class ValidatorsPageComponent implements OnInit {
     const activeCount = validators.filter(v => v.isActive).length;
     const participation = validators.length > 0 ? (activeCount / Math.max(stats.activeValidators, validators.length)) * 100 : 0;
 
-    // Determine network health
-    let networkHealth: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
-    if (stats.averageTps < DEGRADED_TPS_THRESHOLD) {
-      networkHealth = 'unhealthy';
-    } else if (stats.averageTps < HEALTHY_TPS_THRESHOLD) {
+    const fallbackNodes = (health?.network.connectedPeers ?? []).map((peerId, idx) => ({
+      nodeId: peerId,
+      address: peerId,
+      status: 'online' as const,
+      height: this.toNumber(stats.currentHeight),
+      latencyMs: Math.round(health?.network.averageLatencyMs ?? 0),
+      version: health?.version ?? 'unknown',
+      uptimeSeconds: health?.uptimeSeconds ?? 0
+    }));
+
+    const nodes = this.nodes.length > 0 ? this.nodes : fallbackNodes;
+
+    // Determine network health using canonical health endpoint first.
+    let networkHealth: 'healthy' | 'degraded' | 'unhealthy' = 'unhealthy';
+    const nodeStatus = health?.status?.toLowerCase();
+    if (nodeStatus === 'healthy') {
+      networkHealth = 'healthy';
+    } else if (nodeStatus === 'degraded' || nodeStatus === 'warning') {
       networkHealth = 'degraded';
+    } else if (health) {
+      if (!stats.isSynced || stats.dagFinalityGap > 10 || stats.txQueueSize > 500) {
+        networkHealth = 'unhealthy';
+      } else if (stats.dagFinalityGap > 3 || stats.txQueueSize > 100) {
+        networkHealth = 'degraded';
+      } else {
+        networkHealth = 'healthy';
+      }
     }
 
     return {
       stats,
+      health,
       validators,
-      nodes: this.nodes,
+      nodes,
       totalStaked: 0,
       networkHealth,
       avgBlockTime,

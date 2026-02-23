@@ -51,6 +51,8 @@ export interface HealthData {
   readonly status: string;
   readonly version: string;
   readonly uptimeSeconds: number;
+  readonly nodeType: string;
+  readonly timestampSeconds: number;
   readonly consensus: {
     readonly isSynced: boolean;
     readonly currentHeight: number;
@@ -65,10 +67,27 @@ export interface HealthData {
     readonly epochDurationMs: number;
     readonly epochElapsedMs: number;
     readonly timeToNextEpochMs: number;
+    readonly startupGateActive: boolean;
+    readonly startupReadyPeers: number;
+    readonly startupExpectedReadyPeers: number;
+    readonly startupVrfReadyPeers: number;
+    readonly startupExpectedVrfReadyPeers: number;
+    readonly startupWaitMs: number;
+    readonly startupPeerReadiness: readonly {
+      readonly peerId: string;
+      readonly status: string;
+      readonly heartbeatAgeMs: number;
+      readonly commitIndex: number;
+      readonly blocker: string | null;
+    }[];
   };
   readonly network: {
     readonly peerCount: number;
+    readonly connectedPeerCount: number;
+    readonly totalPeers: number;
     readonly connectedPeers: readonly string[];
+    readonly bootstrapPeers: number;
+    readonly messageSuccessRate: number;
     readonly averageLatencyMs: number;
     readonly connectionQuality: number;
   };
@@ -306,16 +325,18 @@ export class ExplorerDataService implements OnDestroy {
 
     try {
       if (numericQuery !== null) {
-        const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByNumber', { block_number: numericQuery, include_txs: true });
-        if (result) {
-          return this.convertBlocksToSummaries([result]);
+        const result = await this.jsonRpcCall<unknown>('eth_getBlockByNumber', { block_number: numericQuery, include_txs: true });
+        const blocks = this.extractBlocksFromLookupResult(result);
+        if (blocks.length > 0) {
+          return this.convertBlocksToSummaries(blocks.slice(0, limit));
         }
         return [];
       }
 
-      const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByHash', { block_hash: trimmed, include_txs: true });
-      if (result) {
-        return this.convertBlocksToSummaries([result]);
+      const result = await this.jsonRpcCall<unknown>('get_block_by_hash', { block_hash: trimmed, include_txs: true });
+      const blocks = this.extractBlocksFromLookupResult(result);
+      if (blocks.length > 0) {
+        return this.convertBlocksToSummaries(blocks.slice(0, limit));
       }
 
       return [];
@@ -363,9 +384,10 @@ export class ExplorerDataService implements OnDestroy {
     }
 
     try {
-      const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByHash', { block_hash: trimmed, include_txs: true });
-      if (result) {
-        const details = this.nodeToExplorerBlock(result);
+      const result = await this.jsonRpcCall<unknown>('get_block_by_hash', { block_hash: trimmed, include_txs: true });
+      const blocks = this.extractBlocksFromLookupResult(result);
+      if (blocks.length > 0) {
+        const details = this.nodeToExplorerBlock(blocks[0]);
         this.blockDetails.set(details.hash, details);
         for (const tx of details.transactions) {
           this.transactionDetails.set(tx.hash, tx as TransactionDetails);
@@ -381,9 +403,10 @@ export class ExplorerDataService implements OnDestroy {
 
   async fetchBlockByNumber(blockNumber: number): Promise<BlockDetails | null> {
     try {
-      const result = await this.jsonRpcCall<NodeBlock>('eth_getBlockByNumber', { block_number: blockNumber, include_txs: true });
-      if (result) {
-        const details = this.nodeToExplorerBlock(result);
+      const result = await this.jsonRpcCall<unknown>('eth_getBlockByNumber', { block_number: blockNumber, include_txs: true });
+      const blocks = this.extractBlocksFromLookupResult(result);
+      if (blocks.length > 0) {
+        const details = this.nodeToExplorerBlock(blocks[0]);
         this.blockDetails.set(details.hash, details);
         for (const tx of details.transactions) {
           this.transactionDetails.set(tx.hash, tx as TransactionDetails);
@@ -1474,7 +1497,7 @@ export class ExplorerDataService implements OnDestroy {
 
       // Network stats (UI-level approximation)
       const now = Date.now();
-      const currentHeight = this.toPositiveInteger(latest);
+      let currentHeightNumber = latest;
 
       let averageTps = 0;
       if (blocks.length >= 2) {
@@ -1500,9 +1523,24 @@ export class ExplorerDataService implements OnDestroy {
       let epochElapsedMs = 0;
       let timeToNextEpochMs = 0;
       let peerCount = 0;
+      let connectedPeerCount = 0;
+      let totalPeers = 0;
       let connectedPeers: readonly string[] = [];
+      let bootstrapPeers = 0;
+      let messageSuccessRate = 0;
       let averageLatencyMs = 0;
       let connectionQuality = 1.0;
+      let committeeSize = 0;
+        let startupGateActive = false;
+        let startupReadyPeers = 0;
+        let startupExpectedReadyPeers = 0;
+        let startupVrfReadyPeers = 0;
+        let startupExpectedVrfReadyPeers = 0;
+        let startupWaitMs = 0;
+        let startupPeerReadiness: HealthData['consensus']['startupPeerReadiness'] = [];
+      let consensusCurrentHeight = latest;
+      let nodeType = 'unknown';
+      let timestampSeconds = 0;
 
       if (typeof health === 'object' && health !== null) {
         const h = health as Record<string, unknown>;
@@ -1510,20 +1548,62 @@ export class ExplorerDataService implements OnDestroy {
         const status = typeof h['status'] === 'string' ? h['status'] : 'unknown';
         const version = typeof h['version'] === 'string' ? h['version'] : 'unknown';
         const uptimeSeconds = typeof h['uptime_seconds'] === 'number' ? h['uptime_seconds'] : 0;
+        nodeType = typeof h['node_type'] === 'string' ? h['node_type'] : 'unknown';
+        timestampSeconds = typeof h['timestamp'] === 'number' ? h['timestamp'] : 0;
 
         const consensus = h['consensus_status'];
         if (typeof consensus === 'object' && consensus !== null) {
           const cs = consensus as Record<string, unknown>;
           isSynced = cs['is_synced'] === true;
+          consensusCurrentHeight = typeof cs['current_height'] === 'number' ? cs['current_height'] as number : latest;
+          currentHeightNumber = consensusCurrentHeight;
           dagTipCommitIndex = typeof cs['dag_tip_commit_index'] === 'number' ? cs['dag_tip_commit_index'] as number : 0;
           finalizedCommitIndex = typeof cs['finalized_commit_index'] === 'number' ? cs['finalized_commit_index'] as number : 0;
           dagFinalityGap = typeof cs['dag_finality_gap'] === 'number' ? cs['dag_finality_gap'] as number : 0;
           txQueueSize = typeof cs['tx_queue_size'] === 'number' ? cs['tx_queue_size'] as number : 0;
           pendingFinalityCerts = typeof cs['pending_finality_certs'] === 'number' ? cs['pending_finality_certs'] as number : 0;
+          committeeSize = typeof cs['committee_size'] === 'number' ? cs['committee_size'] as number : 0;
           epoch = typeof cs['epoch'] === 'number' ? cs['epoch'] as number : 0;
           epochDurationMs = typeof cs['epoch_duration_ms'] === 'number' ? cs['epoch_duration_ms'] as number : 0;
           epochElapsedMs = typeof cs['epoch_elapsed_ms'] === 'number' ? cs['epoch_elapsed_ms'] as number : 0;
           timeToNextEpochMs = typeof cs['time_to_next_epoch_ms'] === 'number' ? cs['time_to_next_epoch_ms'] as number : 0;
+          startupGateActive = cs['startup_gate_active'] === true;
+          startupReadyPeers = typeof cs['startup_ready_peers'] === 'number' ? cs['startup_ready_peers'] as number : 0;
+          startupExpectedReadyPeers = typeof cs['startup_expected_ready_peers'] === 'number'
+            ? cs['startup_expected_ready_peers'] as number
+            : 0;
+          startupVrfReadyPeers = typeof cs['startup_vrf_ready_peers'] === 'number' ? cs['startup_vrf_ready_peers'] as number : 0;
+          startupExpectedVrfReadyPeers = typeof cs['startup_expected_vrf_ready_peers'] === 'number'
+            ? cs['startup_expected_vrf_ready_peers'] as number
+            : 0;
+          startupWaitMs = typeof cs['startup_wait_ms'] === 'number' ? cs['startup_wait_ms'] as number : 0;
+
+          const readinessRaw = cs['startup_peer_readiness'];
+          if (Array.isArray(readinessRaw)) {
+            startupPeerReadiness = readinessRaw
+              .map((entry) => {
+                if (typeof entry !== 'object' || entry === null) {
+                  return null;
+                }
+                const e = entry as Record<string, unknown>;
+                const peerId = typeof e['peer_id'] === 'string' ? e['peer_id'] : '';
+                const status = typeof e['status'] === 'string' ? e['status'] : 'unknown';
+                const heartbeatAgeMs = typeof e['heartbeat_age_ms'] === 'number' ? e['heartbeat_age_ms'] : 0;
+                const commitIndex = typeof e['commit_index'] === 'number' ? e['commit_index'] : 0;
+                const blocker = typeof e['blocker'] === 'string' ? e['blocker'] : null;
+                if (peerId.length === 0) {
+                  return null;
+                }
+                return {
+                  peerId,
+                  status,
+                  heartbeatAgeMs,
+                  commitIndex,
+                  blocker
+                };
+              })
+              .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+          }
           
           const vc = cs['validator_count'];
           if (typeof vc === 'number' && Number.isFinite(vc) && vc > 0) {
@@ -1535,6 +1615,10 @@ export class ExplorerDataService implements OnDestroy {
         if (typeof network === 'object' && network !== null) {
           const ns = network as Record<string, unknown>;
           peerCount = typeof ns['peer_count'] === 'number' ? ns['peer_count'] as number : 0;
+          connectedPeerCount = typeof ns['connected_peer_count'] === 'number' ? ns['connected_peer_count'] as number : 0;
+          totalPeers = typeof ns['total_peers'] === 'number' ? ns['total_peers'] as number : 0;
+          bootstrapPeers = typeof ns['bootstrap_peers'] === 'number' ? ns['bootstrap_peers'] as number : 0;
+          messageSuccessRate = typeof ns['message_success_rate'] === 'number' ? ns['message_success_rate'] as number : 0;
           if (Array.isArray(ns['connected_peers'])) {
             connectedPeers = ns['connected_peers'] as string[];
           }
@@ -1546,24 +1630,37 @@ export class ExplorerDataService implements OnDestroy {
           status,
           version,
           uptimeSeconds,
+          nodeType,
+          timestampSeconds,
           consensus: {
             isSynced,
-            currentHeight: latest,
+            currentHeight: consensusCurrentHeight,
             dagTipCommitIndex,
             finalizedCommitIndex,
             dagFinalityGap,
             txQueueSize,
             pendingFinalityCerts,
             validatorCount: consensusValidatorCount ?? 0,
-            committeeSize: 0,
+            committeeSize,
             epoch,
             epochDurationMs,
             epochElapsedMs,
-            timeToNextEpochMs
+            timeToNextEpochMs,
+            startupGateActive,
+            startupReadyPeers,
+            startupExpectedReadyPeers,
+            startupVrfReadyPeers,
+            startupExpectedVrfReadyPeers,
+            startupWaitMs,
+            startupPeerReadiness
           },
           network: {
             peerCount,
+            connectedPeerCount,
+            totalPeers,
             connectedPeers,
+            bootstrapPeers,
+            messageSuccessRate,
             averageLatencyMs,
             connectionQuality
           }
@@ -1574,6 +1671,7 @@ export class ExplorerDataService implements OnDestroy {
       const activeValidators = this.toPositiveInteger(
         consensusValidatorCount ?? uniqueValidators.size
       );
+      const currentHeight = this.toPositiveInteger(Math.max(0, currentHeightNumber));
 
       this.networkSubject.next({
         currentHeight,
@@ -1840,5 +1938,24 @@ export class ExplorerDataService implements OnDestroy {
       return Math.trunc(maybeCount);
     }
     return transactions.length;
+  }
+
+  private extractBlocksFromLookupResult(result: unknown): readonly NodeBlock[] {
+    if (result && typeof result === 'object') {
+      const maybeBlock = result as Partial<NodeBlock>;
+      if (typeof maybeBlock.block_hash === 'string' && typeof maybeBlock.block_number === 'number') {
+        return [maybeBlock as NodeBlock];
+      }
+
+      const maybeEnvelope = result as { blocks?: unknown; block?: unknown };
+      if (Array.isArray(maybeEnvelope.blocks)) {
+        return maybeEnvelope.blocks as readonly NodeBlock[];
+      }
+      if (maybeEnvelope.block && typeof maybeEnvelope.block === 'object') {
+        return [maybeEnvelope.block as NodeBlock];
+      }
+    }
+
+    return [];
   }
 }
