@@ -1304,8 +1304,18 @@ export class ExplorerDataService implements OnDestroy {
     return state;
   }
 
+  private _nodeOverrideUrl: string | null = null;
+
+  set nodeOverrideUrl(url: string | null) {
+    this._nodeOverrideUrl = url;
+  }
+
+  get nodeOverrideUrl(): string | null {
+    return this._nodeOverrideUrl;
+  }
+
   private nodeEndpoint(path: string): string {
-    const base = (this.backend.nodeBaseUrl || 'https://rpc.testnet.silicaprotocol.network').trim();
+    const base = (this._nodeOverrideUrl || this.backend.nodeBaseUrl || 'https://rpc.testnet.silicaprotocol.network').trim();
     assert(base.length > 0, 'nodeBaseUrl must not be empty');
     const url = new URL(base.endsWith('/') ? base : `${base}/`);
     url.pathname = `${url.pathname.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;

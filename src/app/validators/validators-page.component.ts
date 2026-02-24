@@ -1140,15 +1140,8 @@ export class ValidatorsPageComponent implements OnInit {
   private async checkNodeHealth(nodeUrl: string): Promise<{ healthy: boolean; latencyMs: number; version: string; height: number; peers: number }> {
     const start = performance.now();
     try {
-      const response = await fetch(`${nodeUrl}/jsonrpc`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'health',
-          params: {},
-          id: 1
-        })
+      const response = await fetch(`${nodeUrl}/health`, {
+        method: 'GET'
       });
       const latencyMs = Math.round(performance.now() - start);
       if (!response.ok) {
@@ -1158,9 +1151,9 @@ export class ValidatorsPageComponent implements OnInit {
       return {
         healthy: true,
         latencyMs,
-        version: data.result?.version || '',
-        height: data.result?.block_height || data.result?.height || 0,
-        peers: data.result?.network?.peerCount || data.result?.peers || 0
+        version: data.version || '',
+        height: data.block_height || data.height || 0,
+        peers: data.network?.peerCount || data.peers || 0
       };
     } catch {
       return { healthy: false, latencyMs: Math.round(performance.now() - start), version: '', height: 0, peers: 0 };
@@ -1171,6 +1164,8 @@ export class ValidatorsPageComponent implements OnInit {
     const select = event.target as HTMLSelectElement;
     this.selectedNodeUrl = select.value;
     this.selectedNodeHealth = this.nodeHealthMap.get(select.value) || null;
+    this.data.nodeOverrideUrl = select.value;
+    this.data.refreshNow();
     this.cdr.detectChanges();
   }
 
