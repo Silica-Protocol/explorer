@@ -96,11 +96,11 @@ export interface HealthData {
 export type AlertSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
 
 export interface AlertInfo {
-  readonly alert_type: string;
-  readonly severity: AlertSeverity;
+  readonly code: string;
+  readonly severity: string;
   readonly message: string;
   readonly timestamp: number;
-  readonly resolved: boolean;
+  readonly details?: Record<string, unknown>;
 }
 
 export interface AlertEvent {
@@ -113,7 +113,7 @@ export interface AlertEvent {
 }
 
 export interface AlertsResponse {
-  readonly active_alerts: Record<string, AlertInfo>;
+  readonly active_alerts: AlertInfo[];
   readonly alert_history: AlertEvent[];
 }
 
@@ -143,7 +143,7 @@ export class ExplorerDataService implements OnDestroy {
   private readonly transactionsSubject = new BehaviorSubject<readonly TransactionSummary[]>([]);
   private readonly networkSubject = new BehaviorSubject<ExtendedNetworkStatistics>(this.emptyNetworkStats());
   private readonly healthSubject = new BehaviorSubject<HealthData | null>(null);
-  private readonly alertsSubject = new BehaviorSubject<AlertsResponse>({ active_alerts: {}, alert_history: [] });
+  private readonly alertsSubject = new BehaviorSubject<AlertsResponse>({ active_alerts: [], alert_history: [] });
   private readonly accountsSubject = new BehaviorSubject<readonly AccountSummary[]>([]);
   private readonly lastRefreshedAtSubject = new BehaviorSubject<number | null>(null);
   private readonly refreshInFlightSubject = new BehaviorSubject<boolean>(false);
@@ -517,34 +517,52 @@ export class ExplorerDataService implements OnDestroy {
     total_unshielded: string;
     active_shielded_accounts: number;
     pending_operations: number;
+    homomorphic_accounts: number;
+    homomorphic_transfers: number;
+    stealth_transfers: number;
+    scanned_blocks: number;
+    latest_block: number;
   }> {
     return await this.jsonRpcCall<{
       total_shielded: string;
       total_unshielded: string;
       active_shielded_accounts: number;
       pending_operations: number;
+      homomorphic_accounts: number;
+      homomorphic_transfers: number;
+      stealth_transfers: number;
+      scanned_blocks: number;
+      latest_block: number;
     }>('get_privacy_info', {});
   }
 
   async fetchPrivacyOperations(limit: number = 50): Promise<Array<{
     id: string;
     type: 'shield' | 'unshield' | 'transfer';
+    privacy_mode: 'bridge_shield' | 'bridge_unshield' | 'stealth' | 'homomorphic' | 'encrypted_stealth';
     sender: string;
     recipient: string;
-    amount: string;
+    amount: string | null;
+    amount_visible: boolean;
     status: 'pending' | 'completed' | 'failed';
+    ledger_status: 'pending' | 'included' | 'finalized';
     timestamp: string;
     tx_hash: string;
+    block_number: number | null;
   }>> {
     return await this.jsonRpcCall<Array<{
       id: string;
       type: 'shield' | 'unshield' | 'transfer';
+      privacy_mode: 'bridge_shield' | 'bridge_unshield' | 'stealth' | 'homomorphic' | 'encrypted_stealth';
       sender: string;
       recipient: string;
-      amount: string;
+      amount: string | null;
+      amount_visible: boolean;
       status: 'pending' | 'completed' | 'failed';
+      ledger_status: 'pending' | 'included' | 'finalized';
       timestamp: string;
       tx_hash: string;
+      block_number: number | null;
     }>>('get_privacy_operations', { limit });
   }
 
@@ -1331,7 +1349,7 @@ export class ExplorerDataService implements OnDestroy {
       return response;
     } catch (err) {
       console.warn('Failed to fetch alerts', err);
-      return { active_alerts: {}, alert_history: [] };
+      return { active_alerts: [], alert_history: [] };
     }
   }
 

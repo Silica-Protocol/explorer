@@ -34,12 +34,15 @@ import { ExplorerDataService, AlertInfo, AlertEvent, AlertSeverity } from '@app/
             <article *ngFor="let alert of activeAlertsArray" class="alert-card" [attr.data-severity]="alert.severity">
               <div class="alert-card__header">
                 <span class="alert-severity" [attr.data-severity]="alert.severity">
-                  {{ alert.severity }}
+                  {{ capitalize(alert.severity) }}
                 </span>
-                <span class="alert-type">{{ formatAlertType(alert.alert_type) }}</span>
+                <span class="alert-type">{{ formatAlertCode(alert.code) }}</span>
                 <span class="alert-time">{{ formatTimestamp(alert.timestamp) }}</span>
               </div>
               <p class="alert-card__message">{{ alert.message }}</p>
+              <div *ngIf="alert.details" class="alert-card__details">
+                <pre>{{ formatDetails(alert.details) }}</pre>
+              </div>
             </article>
           </div>
 
@@ -204,22 +207,26 @@ import { ExplorerDataService, AlertInfo, AlertEvent, AlertSeverity } from '@app/
         transition: all 0.2s ease;
       }
 
-      .alert-card[data-severity="Critical"] {
+      .alert-card[data-severity="Critical"],
+      .alert-card[data-severity="critical"] {
         border-left-color: #ef4444;
         background: linear-gradient(135deg, rgba(239, 68, 68, 0.05), transparent);
       }
 
-      .alert-card[data-severity="High"] {
+      .alert-card[data-severity="High"],
+      .alert-card[data-severity="high"] {
         border-left-color: #f97316;
         background: linear-gradient(135deg, rgba(249, 115, 22, 0.05), transparent);
       }
 
-      .alert-card[data-severity="Medium"] {
+      .alert-card[data-severity="Medium"],
+      .alert-card[data-severity="medium"] {
         border-left-color: #f59e0b;
         background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), transparent);
       }
 
-      .alert-card[data-severity="Low"] {
+      .alert-card[data-severity="Low"],
+      .alert-card[data-severity="low"] {
         border-left-color: #3b82f6;
         background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), transparent);
       }
@@ -244,22 +251,26 @@ import { ExplorerDataService, AlertInfo, AlertEvent, AlertSeverity } from '@app/
         text-transform: uppercase;
       }
 
-      .alert-severity[data-severity="Critical"] {
+      .alert-severity[data-severity="Critical"],
+      .alert-severity[data-severity="critical"] {
         background: rgba(239, 68, 68, 0.2);
         color: #ef4444;
       }
 
-      .alert-severity[data-severity="High"] {
+      .alert-severity[data-severity="High"],
+      .alert-severity[data-severity="high"] {
         background: rgba(249, 115, 22, 0.2);
         color: #f97316;
       }
 
-      .alert-severity[data-severity="Medium"] {
+      .alert-severity[data-severity="Medium"],
+      .alert-severity[data-severity="medium"] {
         background: rgba(245, 158, 11, 0.2);
         color: #f59e0b;
       }
 
-      .alert-severity[data-severity="Low"] {
+      .alert-severity[data-severity="Low"],
+      .alert-severity[data-severity="low"] {
         background: rgba(59, 130, 246, 0.2);
         color: #3b82f6;
       }
@@ -277,8 +288,23 @@ import { ExplorerDataService, AlertInfo, AlertEvent, AlertSeverity } from '@app/
       }
 
       .alert-card__message {
-        margin: 0;
+        margin: 0 0 0.75rem 0;
         line-height: 1.5;
+      }
+
+      .alert-card__details {
+        margin-top: 0.75rem;
+        padding: 0.75rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        font-size: 0.8rem;
+        overflow-x: auto;
+      }
+
+      .alert-card__details pre {
+        margin: 0;
+        font-family: monospace;
+        color: var(--text-secondary);
       }
 
       .empty-state {
@@ -399,13 +425,13 @@ import { ExplorerDataService, AlertInfo, AlertEvent, AlertSeverity } from '@app/
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AlertsPageComponent implements OnInit {
-  activeAlerts: Record<string, AlertInfo> = {};
+  activeAlerts: AlertInfo[] = [];
   alertHistory: AlertEvent[] = [];
   loading = true;
   error: string | null = null;
 
   get activeAlertsArray(): AlertInfo[] {
-    return Object.values(this.activeAlerts);
+    return this.activeAlerts;
   }
 
   get activeAlertCount(): number {
@@ -428,7 +454,7 @@ export class AlertsPageComponent implements OnInit {
 
     try {
       const response = await this.data.fetchAlerts();
-      this.activeAlerts = response.active_alerts || {};
+      this.activeAlerts = response.active_alerts || [];
       this.alertHistory = (response.alert_history || []).sort((a, b) => b.timestamp - a.timestamp);
     } catch (err) {
       this.error = 'Failed to load alerts';
@@ -438,8 +464,23 @@ export class AlertsPageComponent implements OnInit {
     }
   }
 
+  formatAlertCode(code: string): string {
+    return code.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  }
+
   formatAlertType(alertType: string): string {
     return alertType.split('::').pop() || alertType;
+  }
+
+  capitalize(str: string): string {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  }
+
+  formatDetails(details: Record<string, unknown>): string {
+    return JSON.stringify(details, null, 2);
   }
 
   formatTimestamp(timestamp: number): string {

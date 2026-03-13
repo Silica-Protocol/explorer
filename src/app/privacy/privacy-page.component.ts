@@ -7,15 +7,19 @@ interface BridgeMetrics {
   totalShielded: number;
   totalUnshielded: number;
   activeShieldedAccounts: number;
+  homomorphicAccounts: number;
+  hiddenTransfers: number;
   pendingOperations: number;
 }
 
 interface BridgeOperation {
   id: string;
   type: 'shield' | 'unshield' | 'transfer';
+  privacyMode: 'bridge_shield' | 'bridge_unshield' | 'stealth' | 'homomorphic' | 'encrypted_stealth';
   sender: string;
   recipient: string;
-  amount: number;
+  amount: number | null;
+  amountVisible: boolean;
   status: 'pending' | 'completed' | 'failed';
   timestamp: string;
   txHash: string;
@@ -30,7 +34,7 @@ interface BridgeOperation {
       <header class="privacy__header">
         <div>
           <h1 id="privacy-heading">Privacy & Bridge</h1>
-          <p class="privacy__subtitle">Shielded transactions and cross-chain bridge operations.</p>
+          <p class="privacy__subtitle">Shielded bridge activity, stealth transfers, and hidden-amount homomorphic transfers.</p>
         </div>
       </header>
 
@@ -59,6 +63,18 @@ interface BridgeOperation {
           </article>
 
           <article class="metric-card metric-card--purple">
+            <h2>Homomorphic Accounts</h2>
+            <p class="metric-value">{{ metrics.homomorphicAccounts }}</p>
+            <span class="metric-label">accounts</span>
+          </article>
+
+          <article class="metric-card metric-card--amber">
+            <h2>Hidden Transfers</h2>
+            <p class="metric-value">{{ metrics.hiddenTransfers }}</p>
+            <span class="metric-label">homomorphic</span>
+          </article>
+
+          <article class="metric-card metric-card--slate">
             <h2>Pending</h2>
             <p class="metric-value">{{ metrics.pendingOperations }}</p>
             <span class="metric-label">operations</span>
@@ -69,7 +85,7 @@ interface BridgeOperation {
         <section class="privacy__transactions" aria-label="Shielded transactions">
           <div class="section-heading">
             <h2>Recent Privacy Operations</h2>
-            <p class="muted">Shield, unshield, and private transfers</p>
+            <p class="muted">Shield, unshield, stealth, and homomorphic transfers</p>
           </div>
 
           <div class="operations-table" role="table">
@@ -88,13 +104,13 @@ interface BridgeOperation {
               role="row"
             >
               <span role="cell">
-                <span class="operation-type" [attr.data-type]="op.type">
-                  {{ op.type | titlecase }}
+                <span class="operation-type" [attr.data-mode]="op.privacyMode">
+                  {{ operationLabel(op) }}
                 </span>
               </span>
               <span role="cell" class="address">{{ formatAddress(op.sender) }}</span>
               <span role="cell" class="address">{{ formatAddress(op.recipient) }}</span>
-              <span role="cell">{{ formatCoins(op.amount) }} CHERT</span>
+              <span role="cell">{{ formatOperationAmount(op) }}</span>
               <span role="cell">
                 <span class="status" [attr.data-status]="op.status">
                   {{ op.status | titlecase }}
@@ -238,6 +254,8 @@ interface BridgeOperation {
       .metric-card--teal::before { background: linear-gradient(180deg, #14b8a6, #0d9488); }
       .metric-card--green::before { background: linear-gradient(180deg, #22c55e, #16a34a); }
       .metric-card--purple::before { background: linear-gradient(180deg, #a855f7, #9333ea); }
+      .metric-card--amber::before { background: linear-gradient(180deg, #f59e0b, #d97706); }
+      .metric-card--slate::before { background: linear-gradient(180deg, #64748b, #475569); }
 
       .metric-card h2 {
         font-size: var(--metric-label-size);
@@ -343,19 +361,29 @@ interface BridgeOperation {
         font-weight: 500;
       }
 
-      .operation-type[data-type="shield"] {
+      .operation-type[data-mode="bridge_shield"] {
         background: rgba(14, 165, 233, 0.15);
         color: #0ea5e9;
       }
 
-      .operation-type[data-type="unshield"] {
+      .operation-type[data-mode="bridge_unshield"] {
         background: rgba(20, 184, 166, 0.15);
         color: #14b8a6;
       }
 
-      .operation-type[data-type="transfer"] {
+      .operation-type[data-mode="stealth"] {
+        background: rgba(99, 102, 241, 0.15);
+        color: #6366f1;
+      }
+
+      .operation-type[data-mode="homomorphic"] {
         background: rgba(168, 85, 247, 0.15);
         color: #a855f7;
+      }
+
+      .operation-type[data-mode="encrypted_stealth"] {
+        background: rgba(244, 114, 182, 0.15);
+        color: #f472b6;
       }
 
       .operation-type svg {
@@ -488,6 +516,8 @@ export class PrivacyPageComponent implements OnInit {
     totalShielded: 0,
     totalUnshielded: 0,
     activeShieldedAccounts: 0,
+    homomorphicAccounts: 0,
+    hiddenTransfers: 0,
     pendingOperations: 0
   };
   
@@ -521,6 +551,8 @@ export class PrivacyPageComponent implements OnInit {
           totalShielded: parseFloat(privacyInfo.total_shielded) / 1_000_000,
           totalUnshielded: parseFloat(privacyInfo.total_unshielded) / 1_000_000,
           activeShieldedAccounts: privacyInfo.active_shielded_accounts,
+          homomorphicAccounts: privacyInfo.homomorphic_accounts ?? 0,
+          hiddenTransfers: privacyInfo.homomorphic_transfers ?? 0,
           pendingOperations: privacyInfo.pending_operations
         };
       }
@@ -529,9 +561,11 @@ export class PrivacyPageComponent implements OnInit {
         this.operations = ops.map(o => ({
           id: o.id,
           type: o.type,
+          privacyMode: o.privacy_mode,
           sender: o.sender,
           recipient: o.recipient,
-          amount: parseFloat(o.amount) / 1_000_000,
+          amount: o.amount ? parseFloat(o.amount) / 1_000_000 : null,
+          amountVisible: o.amount_visible,
           status: o.status,
           timestamp: o.timestamp,
           txHash: o.tx_hash
@@ -558,5 +592,30 @@ export class PrivacyPageComponent implements OnInit {
   formatCoins(value: number): string {
     if (!value && value !== 0) return '0';
     return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  operationLabel(op: BridgeOperation): string {
+    switch (op.privacyMode) {
+      case 'bridge_shield':
+        return 'Shield';
+      case 'bridge_unshield':
+        return 'Unshield';
+      case 'stealth':
+        return 'Stealth';
+      case 'homomorphic':
+        return 'Homomorphic';
+      case 'encrypted_stealth':
+        return 'Encrypted';
+      default:
+        return 'Transfer';
+    }
+  }
+
+  formatOperationAmount(op: BridgeOperation): string {
+    if (!op.amountVisible || op.amount === null) {
+      return 'Hidden';
+    }
+
+    return `${this.formatCoins(op.amount)} CHERT`;
   }
 }

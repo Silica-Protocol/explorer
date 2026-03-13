@@ -33,9 +33,11 @@ interface PrivacyMetrics {
 interface PrivacyOperation {
   id: string;
   type: 'shield' | 'unshield' | 'transfer';
+  privacyMode: 'bridge_shield' | 'bridge_unshield' | 'stealth' | 'homomorphic' | 'encrypted_stealth';
   sender: string;
   recipient: string;
-  amount: number;
+  amount: number | null;
+  amountVisible: boolean;
   status: 'pending' | 'completed' | 'failed';
   timestamp: string;
 }
@@ -238,12 +240,12 @@ interface PrivacyOperation {
               <div *ngFor="let op of privacyOperations" class="bridge-row">
                 <span>
                   <span class="tx-type" [attr.data-type]="op.type">
-                    {{ op.type | titlecase }}
+                    {{ privacyOperationLabel(op) }}
                   </span>
                 </span>
                 <span class="address">{{ formatAddress(op.sender) }}</span>
                 <span class="address">{{ formatAddress(op.recipient) }}</span>
-                <span class="amount">{{ formatCoins(op.amount) }} CHERT</span>
+                <span class="amount">{{ formatPrivacyAmount(op) }}</span>
                 <span>
                   <span class="status-badge" [attr.data-status]="op.status">
                     {{ op.status | titlecase }}
@@ -699,9 +701,11 @@ export class BridgePageComponent implements OnInit {
       this.privacyOperations = privacyOps.map(o => ({
         id: o.id,
         type: o.type,
+        privacyMode: o.privacy_mode,
         sender: o.sender,
         recipient: o.recipient,
-        amount: parseFloat(o.amount) / 1_000_000,
+        amount: o.amount ? parseFloat(o.amount) / 1_000_000 : null,
+        amountVisible: o.amount_visible,
         status: o.status,
         timestamp: o.timestamp
       }));
@@ -721,5 +725,30 @@ export class BridgePageComponent implements OnInit {
 
   formatCoins(value: number): string {
     return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+
+  formatPrivacyAmount(operation: PrivacyOperation): string {
+    if (!operation.amountVisible || operation.amount === null) {
+      return 'Hidden';
+    }
+
+    return `${this.formatCoins(operation.amount)} CHERT`;
+  }
+
+  privacyOperationLabel(operation: PrivacyOperation): string {
+    switch (operation.privacyMode) {
+      case 'bridge_shield':
+        return 'Shield';
+      case 'bridge_unshield':
+        return 'Unshield';
+      case 'stealth':
+        return 'Stealth';
+      case 'homomorphic':
+        return 'Homomorphic';
+      case 'encrypted_stealth':
+        return 'Encrypted';
+      default:
+        return operation.type;
+    }
   }
 }
