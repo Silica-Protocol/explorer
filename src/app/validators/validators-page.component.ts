@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { combineLatest, Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { combineLatest, Observable, Subject, interval } from 'rxjs';
+import { map, takeUntil, switchMap } from 'rxjs/operators';
 import { ExplorerDataService, ExtendedNetworkStatistics, HealthData } from '@app/services/explorer-data.service';
 import type { PositiveInteger, UnixMs, Hash, CommitteeId } from '@silica-protocol/explorer-models';
 import type { BlockSummary, AccountAddress } from '@silica-protocol/explorer-models';
@@ -11,7 +11,6 @@ import { assert } from '@shared/util/assert';
 interface ValidatorInfo {
   readonly id: string;
   readonly address: AccountAddress | CommitteeId;
-  readonly blocksProduced: number;
   readonly lastBlockTime: UnixMs | null;
   readonly isActive: boolean;
   readonly stake: number;
@@ -321,6 +320,33 @@ interface NodeHealth {
               <span class="consensus-card__status" data-status="healthy">Scheduled</span>
             </div>
           </article>
+
+          <article class="consensus-card">
+            <div class="consensus-card__icon consensus-card__icon--election">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v20M2 12h20"></path>
+              </svg>
+            </div>
+            <div class="consensus-card__content">
+              <h3>Current Epoch</h3>
+              <p class="consensus-card__value">{{ vm.health?.consensus?.epoch ?? 0 }}</p>
+              <span class="consensus-card__status" data-status="healthy">Active</span>
+            </div>
+          </article>
+
+          <article class="consensus-card">
+            <div class="consensus-card__icon consensus-card__icon--election">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </div>
+            <div class="consensus-card__content">
+              <h3>Epoch Elapsed</h3>
+              <p class="consensus-card__value">{{ formatWaitMs(vm.health?.consensus?.epochElapsedMs ?? 0) }}</p>
+              <span class="consensus-card__status" data-status="healthy">Running</span>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -391,7 +417,6 @@ interface NodeHealth {
         <div class="validator-table" role="table">
           <div class="validator-table__header" role="row">
             <span role="columnheader">Validator</span>
-            <span role="columnheader">Blocks Produced</span>
             <span role="columnheader">Last Block</span>
             <span role="columnheader">Status</span>
           </div>
@@ -403,7 +428,6 @@ interface NodeHealth {
               role="row"
             >
               <span role="cell" class="validator-address">{{ formatAddress(validator.address) }}</span>
-              <span role="cell">{{ validator.blocksProduced }}</span>
               <span role="cell">{{ validator.lastBlockTime ? formatTime(validator.lastBlockTime) : '—' }}</span>
               <span role="cell">
                 <span class="status" [class.status--active]="validator.isActive">
@@ -1080,15 +1104,34 @@ interface NodeHealth {
   ],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ValidatorsPageComponent implements OnInit {
+export class ValidatorsPageComponent implements OnInit, OnDestroy {
   private nodes: NodeInfo[] = [];
+  private destroy$ = new Subject<void>();
+
+  private readonly nodes$ = interval(10000).pipe(
+    takeUntil(this.destroy$),
+    switchMap(() => this.data.fetchNodes()),
+    map(nodesData => nodesData.map(n => ({
+      nodeId: n.node_id,
+      address: n.address,
+      status: n.status,
+      height: n.height,
+      latencyMs: n.latency_ms,
+      version: n.version,
+      uptimeSeconds: n.uptime_seconds
+    })))
+  );
 
   readonly viewModel$: Observable<ValidatorsViewModel> = combineLatest([
     this.data.networkStats$,
     this.data.blocks$,
-    this.data.health$
+    this.data.health$,
+    this.nodes$
   ]).pipe(
-    map(([stats, blocks, health]) => this.buildViewModel(stats, blocks, health))
+    map(([stats, blocks, health, nodes]) => {
+      this.nodes = nodes;
+      return this.buildViewModel(stats, blocks, health);
+    })
   );
 
   constructor(
@@ -1103,22 +1146,12 @@ export class ValidatorsPageComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.checkAllNodesHealth();
-    try {
-      const nodesData = await this.data.fetchNodes();
-      this.nodes = nodesData.map(n => ({
-        nodeId: n.node_id,
-        address: n.address,
-        status: n.status,
-        height: n.height,
-        latencyMs: n.latency_ms,
-        version: n.version,
-        uptimeSeconds: n.uptime_seconds
-      }));
-    } catch (err) {
-      console.warn('Failed to load nodes:', err);
-      this.nodes = [];
-    }
     this.cdr.detectChanges();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   async checkAllNodesHealth(): Promise<void> {
@@ -1242,19 +1275,17 @@ export class ValidatorsPageComponent implements OnInit {
     assert(stats !== undefined, 'Network stats must be defined');
 
     // Extract unique validators from block data
-    const validatorMap = new Map<string, { blocksProduced: number; lastBlockTime: UnixMs | null }>();
+    const validatorMap = new Map<string, { lastBlockTime: UnixMs | null }>();
 
     for (const block of blocks) {
       const miner = block.miner as string;
       const existing = validatorMap.get(miner);
       if (existing) {
-        existing.blocksProduced += 1;
         if (!existing.lastBlockTime || (block.timestamp as number) > (existing.lastBlockTime as number)) {
           existing.lastBlockTime = block.timestamp;
         }
       } else {
         validatorMap.set(miner, {
-          blocksProduced: 1,
           lastBlockTime: block.timestamp
         });
       }
@@ -1264,7 +1295,7 @@ export class ValidatorsPageComponent implements OnInit {
         for (const member of block.delegateSet) {
           const memberStr = member as string;
           if (!validatorMap.has(memberStr)) {
-            validatorMap.set(memberStr, { blocksProduced: 0, lastBlockTime: null });
+            validatorMap.set(memberStr, { lastBlockTime: null });
           }
         }
       }
@@ -1275,12 +1306,11 @@ export class ValidatorsPageComponent implements OnInit {
       .map(([address, data], index) => ({
         id: `validator-${index}`,
         address: address as AccountAddress,
-        blocksProduced: data.blocksProduced,
         lastBlockTime: data.lastBlockTime,
-        isActive: data.blocksProduced > 0,
+        isActive: data.lastBlockTime !== null,
         stake: 0 // Stake info not available from block data
       }))
-      .sort((a, b) => b.blocksProduced - a.blocksProduced)
+      .sort((a, b) => (b.lastBlockTime ?? 0) - (a.lastBlockTime ?? 0))
       .slice(0, MAX_VALIDATORS);
 
     // Calculate average block time
@@ -1302,7 +1332,7 @@ export class ValidatorsPageComponent implements OnInit {
       height: this.toNumber(stats.currentHeight),
       latencyMs: Math.round(health?.network.averageLatencyMs ?? 0),
       version: health?.version ?? 'unknown',
-      uptimeSeconds: health?.uptimeSeconds ?? 0
+      uptimeSeconds: 0
     }));
 
     const nodes = this.nodes.length > 0 ? this.nodes : fallbackNodes;

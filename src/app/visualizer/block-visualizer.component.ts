@@ -368,12 +368,12 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
     ).subscribe(latestBlock => {
       if (!latestBlock) return;
       
-      const now = Date.now();
+      const blockTimestamp = Number(latestBlock.timestamp);
       const block: BlockVisual = {
         id: String(latestBlock.height),
         hash: String(latestBlock.hash),
         txCount: Number(latestBlock.transactionCount) || 0,
-        timestamp: now,
+        timestamp: blockTimestamp,
         x: this.width + this.blockSize,
         y: this.height / 2 + (Math.random() - 0.5) * 100,
         opacity: 0,
@@ -383,13 +383,13 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
       this.displayedBlocks.unshift(block);
       this.totalBlocks++;
       this.totalTransactions += block.txCount;
-      this.blockTimes.push(now);
+      this.blockTimes.push(blockTimestamp);
       
       if (this.blockTimes.length > 10) {
         this.blockTimes.shift();
       }
       this.calculateBps();
-      this.lastBlockTime = now;
+      this.lastBlockTime = blockTimestamp;
     });
   }
 
@@ -445,12 +445,12 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
   }
 
   private spawnBlockFromData(block: BlockSummary): void {
-    const now = Date.now();
+    const blockTimestamp = Number(block.timestamp);
     const visual: BlockVisual = {
       id: String(block.height),
       hash: String(block.hash),
       txCount: Number(block.transactionCount) || 0,
-      timestamp: now,
+      timestamp: blockTimestamp,
       x: this.width + this.blockSize,
       y: this.height / 2 + (Math.random() - 0.5) * 100,
       opacity: 0,
@@ -460,7 +460,7 @@ export class BlockVisualizerComponent implements OnInit, OnDestroy {
     this.displayedBlocks.unshift(visual);
     this.totalBlocks++;
     this.totalTransactions += visual.txCount;
-    this.blockTimes.push(now);
+    this.blockTimes.push(blockTimestamp);
     
     if (this.blockTimes.length > 10) {
       this.blockTimes.shift();

@@ -741,11 +741,40 @@ export class ExplorerDataService implements OnDestroy {
     gas_usage: Array<{ timestamp: string; gas_used: number }>;
     tx_volume: Array<{ timestamp: string; volume: number }>;
   }> {
+    if (this.backend.mode === 'mock') {
+      return this.generateMockAnalytics();
+    }
     return await this.jsonRpcCall<{
       tps_history: Array<{ timestamp: string; tps: number }>;
       gas_usage: Array<{ timestamp: string; gas_used: number }>;
       tx_volume: Array<{ timestamp: string; volume: number }>;
     }>('get_analytics', {});
+  }
+
+  private generateMockAnalytics(): {
+    tps_history: Array<{ timestamp: string; tps: number }>;
+    gas_usage: Array<{ timestamp: string; gas_used: number }>;
+    tx_volume: Array<{ timestamp: string; volume: number }>;
+  } {
+    const now = Date.now();
+    const points = 24;
+    const tpsHistory: Array<{ timestamp: string; tps: number }> = [];
+    const gasUsage: Array<{ timestamp: string; gas_used: number }> = [];
+    const txVolume: Array<{ timestamp: string; volume: number }> = [];
+
+    for (let i = 0; i < points; i++) {
+      const timestamp = new Date(now - (points - i - 1) * 3600000).toISOString();
+      const baseTps = 15 + Math.sin(i / 3) * 8 + Math.random() * 5;
+      tpsHistory.push({ timestamp, tps: Math.max(0, baseTps) });
+
+      const baseGas = 50000 + Math.sin(i / 2) * 20000 + Math.random() * 10000;
+      gasUsage.push({ timestamp, gas_used: Math.max(0, baseGas) });
+
+      const baseVolume = 1000000 + Math.sin(i / 4) * 400000 + Math.random() * 200000;
+      txVolume.push({ timestamp, volume: Math.max(0, baseVolume) });
+    }
+
+    return { tps_history: tpsHistory, gas_usage: gasUsage, tx_volume: txVolume };
   }
 
   async fetchChainParameters(): Promise<{
@@ -1053,12 +1082,18 @@ export class ExplorerDataService implements OnDestroy {
     const finalizedHeightNumber = Math.max(0, (currentHeight as number) - this.config.finalityLag);
     const finalizedHeight = this.toPositiveInteger(finalizedHeightNumber);
 
+    const currentHeightNum = currentHeight as number;
+    const blocksIntoEpoch = currentHeightNum % 32;
+    const timeIntoEpoch = blocksIntoEpoch * this.config.blockIntervalMs;
+    const epochDuration = 32 * this.config.blockIntervalMs;
+    const nextElectionEtaMs = Math.max(0, epochDuration - timeIntoEpoch);
+
     const stats: ExtendedNetworkStatistics = {
       currentHeight,
       finalizedHeight,
       averageTps,
       activeValidators: this.currentCommittee.length,
-      nextElectionEtaMs: Math.max(0, this.nextElectionTimestamp - Date.now()),
+      nextElectionEtaMs,
       timestamp: this.toUnixMs(Date.now()),
       dagTipCommitIndex: 0,
       finalizedCommitIndex: 0,
@@ -1066,7 +1101,7 @@ export class ExplorerDataService implements OnDestroy {
       txQueueSize: 0,
       pendingFinalityCerts: 0,
       isSynced: true,
-      epoch: 0,
+      epoch: Math.floor(currentHeightNum / 32),
       epochDurationMs: 0,
       epochElapsedMs: 0,
       timeToNextEpochMs: 0
