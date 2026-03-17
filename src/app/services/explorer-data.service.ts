@@ -741,40 +741,11 @@ export class ExplorerDataService implements OnDestroy {
     gas_usage: Array<{ timestamp: string; gas_used: number }>;
     tx_volume: Array<{ timestamp: string; volume: number }>;
   }> {
-    if (this.backend.mode === 'mock') {
-      return this.generateMockAnalytics();
-    }
     return await this.jsonRpcCall<{
       tps_history: Array<{ timestamp: string; tps: number }>;
       gas_usage: Array<{ timestamp: string; gas_used: number }>;
       tx_volume: Array<{ timestamp: string; volume: number }>;
     }>('get_analytics', {});
-  }
-
-  private generateMockAnalytics(): {
-    tps_history: Array<{ timestamp: string; tps: number }>;
-    gas_usage: Array<{ timestamp: string; gas_used: number }>;
-    tx_volume: Array<{ timestamp: string; volume: number }>;
-  } {
-    const now = Date.now();
-    const points = 24;
-    const tpsHistory: Array<{ timestamp: string; tps: number }> = [];
-    const gasUsage: Array<{ timestamp: string; gas_used: number }> = [];
-    const txVolume: Array<{ timestamp: string; volume: number }> = [];
-
-    for (let i = 0; i < points; i++) {
-      const timestamp = new Date(now - (points - i - 1) * 3600000).toISOString();
-      const baseTps = 15 + Math.sin(i / 3) * 8 + Math.random() * 5;
-      tpsHistory.push({ timestamp, tps: Math.max(0, baseTps) });
-
-      const baseGas = 50000 + Math.sin(i / 2) * 20000 + Math.random() * 10000;
-      gasUsage.push({ timestamp, gas_used: Math.max(0, baseGas) });
-
-      const baseVolume = 1000000 + Math.sin(i / 4) * 400000 + Math.random() * 200000;
-      txVolume.push({ timestamp, volume: Math.max(0, baseVolume) });
-    }
-
-    return { tps_history: tpsHistory, gas_usage: gasUsage, tx_volume: txVolume };
   }
 
   async fetchChainParameters(): Promise<{
@@ -825,7 +796,70 @@ export class ExplorerDataService implements OnDestroy {
       version: string;
       uptime_seconds: number;
     }>}>('get_nodes', {});
+    console.log('Nodes response:', response);
     return response.nodes;
+  }
+
+  async fetchNetworkInfo(): Promise<{
+    validators: Array<{
+      address: string;
+      stake_amount: string;
+      is_active: boolean;
+      reputation_score: number;
+      commission_rate: number;
+      last_activity: string;
+    }>;
+    peers: Array<{
+      peer_id: string;
+      is_connected: boolean;
+      status: string;
+      heartbeat_age_ms: number | null;
+      commit_index: number | null;
+      committee_registered: boolean | null;
+      committee_total: number | null;
+      blocker: string | null;
+    }>;
+    network: {
+      current_height: number;
+      epoch: number;
+      is_synced: boolean;
+      connected_peer_count: number;
+      average_latency_ms: number;
+      total_validators: number;
+      active_validators: number;
+    };
+  }> {
+    const response = await this.jsonRpcCall<{
+      validators: Array<{
+        address: string;
+        stake_amount: string;
+        is_active: boolean;
+        reputation_score: number;
+        commission_rate: number;
+        last_activity: string;
+      }>;
+      peers: Array<{
+        peer_id: string;
+        is_connected: boolean;
+        status: string;
+        heartbeat_age_ms: number | null;
+        commit_index: number | null;
+        committee_registered: boolean | null;
+        committee_total: number | null;
+        blocker: string | null;
+      }>;
+      network: {
+        current_height: number;
+        epoch: number;
+        is_synced: boolean;
+        connected_peer_count: number;
+        average_latency_ms: number;
+        total_validators: number;
+        active_validators: number;
+      };
+    }>('get_network_info', {});
+    console.log('Network info response:', response);
+    return response;
   }
 
   async fetchBridgeHistory(limit: number = 50): Promise<Array<{
@@ -1637,6 +1671,7 @@ export class ExplorerDataService implements OnDestroy {
       let timestampSeconds = 0;
 
       if (typeof health === 'object' && health !== null) {
+        console.log('Health response:', JSON.stringify(health, null, 2));
         const h = health as Record<string, unknown>;
         
         const status = typeof h['status'] === 'string' ? h['status'] : 'unknown';

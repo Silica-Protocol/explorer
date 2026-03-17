@@ -4,6 +4,7 @@ import { Router, RouterModule } from '@angular/router';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatBlockHeight, formatHash } from '@shared/util/format';
 import type { BlockSummary, Hash, UnixMs } from '@silica-protocol/explorer-models';
 
 @Component({
@@ -322,25 +323,7 @@ export class BlockListComponent {
     return `${value.slice(0, 10)}…${value.slice(-6)}`;
   }
 
-  formatBlockHeight(height: number): string {
-    const h = Number(height);
-    const epochSize = 32768; // 32^3
-    const major = Math.floor(h / epochSize);
-    const minor = h % epochSize;
-
-    const base32Chars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-    const idx2 = minor % 32;
-    const minor1 = Math.floor(minor / 32);
-    const idx1 = minor1 % 32;
-    const idx0 = Math.floor(minor1 / 32);
-
-    const minorStr = base32Chars[idx0] + base32Chars[idx1] + base32Chars[idx2];
-
-    const majorStr = major.toString().padStart(9, '0').replace(/(\d{3})(?=\d)/g, '$1-');
-
-    return `${majorStr}.${minorStr}`;
-  }
+  formatBlockHeight = formatBlockHeight;
 
   formatValidator(validator: string): string {
     return validator;

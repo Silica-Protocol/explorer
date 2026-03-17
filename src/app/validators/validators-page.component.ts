@@ -14,12 +14,19 @@ interface ValidatorInfo {
   readonly lastBlockTime: UnixMs | null;
   readonly isActive: boolean;
   readonly stake: number;
+  readonly reputation: number;
 }
 
 interface NodeInfo {
   nodeId: string;
   address: string;
   status: 'online' | 'offline' | 'syncing';
+  isConnected: boolean;
+  heartbeatAgeMs: number | null;
+  commitIndex: number | null;
+  committeeRegistered: boolean | null;
+  committeeTotal: number | null;
+  blocker: string | null;
   height: number;
   latencyMs: number;
   version: string;
@@ -39,23 +46,6 @@ interface ValidatorsViewModel {
 
 const MAX_VALIDATORS = 128;
 
-const NODE_URLS = [
-  { id: '0', url: 'https://rpc0.testnet.silicaprotocol.network', label: 'Node 0' },
-  { id: '1', url: 'https://rpc1.testnet.silicaprotocol.network', label: 'Node 1' },
-  { id: '2', url: 'https://rpc2.testnet.silicaprotocol.network', label: 'Node 2' },
-  { id: '3', url: 'https://rpc3.testnet.silicaprotocol.network', label: 'Node 3' },
-];
-
-interface NodeHealth {
-  url: string;
-  label: string;
-  healthy: boolean;
-  latencyMs: number;
-  version: string;
-  height: number;
-  peers: number;
-}
-
 @Component({
   selector: 'validators-page',
   standalone: true,
@@ -66,21 +56,6 @@ interface NodeHealth {
         <div>
           <h1 id="validators-heading">Network Overview</h1>
           <p class="validators__subtitle">Real-time network health, validators, and connected peers.</p>
-        </div>
-        
-        <div class="validators__node-selector">
-          <label for="node-select" class="node-selector__label">Node:</label>
-          <select id="node-select" class="node-selector__dropdown" (change)="onNodeChange($event)">
-            <option *ngFor="let node of nodeUrls" [value]="node.url" [selected]="selectedNodeUrl === node.url">
-              {{ node.label }}
-            </option>
-          </select>
-          <span class="node-selector__status" [class.online]="selectedNodeHealth?.healthy" [class.offline]="!selectedNodeHealth?.healthy">
-            {{ selectedNodeHealth?.healthy ? '● Online' : '○ Offline' }}
-          </span>
-          <span class="node-selector__latency" *ngIf="selectedNodeHealth?.healthy">
-            {{ selectedNodeHealth?.latencyMs }}ms
-          </span>
         </div>
 
         <div class="validators__health" [attr.data-status]="vm.networkHealth">
@@ -417,7 +392,8 @@ interface NodeHealth {
         <div class="validator-table" role="table">
           <div class="validator-table__header" role="row">
             <span role="columnheader">Validator</span>
-            <span role="columnheader">Last Block</span>
+            <span role="columnheader">Stake</span>
+            <span role="columnheader">Reputation</span>
             <span role="columnheader">Status</span>
           </div>
 
@@ -428,7 +404,8 @@ interface NodeHealth {
               role="row"
             >
               <span role="cell" class="validator-address">{{ formatAddress(validator.address) }}</span>
-              <span role="cell">{{ validator.lastBlockTime ? formatTime(validator.lastBlockTime) : '—' }}</span>
+              <span role="cell">{{ formatStake(validator.stake) }}</span>
+              <span role="cell">{{ formatReputation(validator.reputation) }}</span>
               <span role="cell">
                 <span class="status" [class.status--active]="validator.isActive">
                   {{ validator.isActive ? 'Active' : 'Inactive' }}
@@ -449,31 +426,37 @@ interface NodeHealth {
       <section class="nodes__list" aria-label="Connected peers">
         <div class="section-heading">
           <h2>Connected Peers</h2>
-          <p class="muted">{{ vm.nodes.length }} nodes in the network</p>
+          <p class="muted">{{ vm.nodes.length }} peers in the network</p>
         </div>
 
         <div class="nodes-table" role="table">
           <div class="nodes-table__header" role="row">
-            <span role="columnheader">Node ID</span>
+            <span role="columnheader">Peer ID</span>
+            <span role="columnheader">Connected</span>
             <span role="columnheader">Status</span>
-            <span role="columnheader">Height</span>
-            <span role="columnheader">Latency</span>
-            <span role="columnheader">Uptime</span>
-            <span role="columnheader">Version</span>
+            <span role="columnheader">Heartbeat Age</span>
+            <span role="columnheader">Commit Index</span>
+            <span role="columnheader">Committee</span>
+            <span role="columnheader">Blocker</span>
           </div>
 
           <ng-container *ngIf="vm.nodes.length > 0; else noNodes">
             <div *ngFor="let node of vm.nodes; trackBy: trackByNode" class="node-row" role="row">
               <span role="cell" class="node-id">{{ formatNodeId(node.nodeId) }}</span>
               <span role="cell">
+                <span class="status" [attr.data-status]="node.isConnected ? 'online' : 'offline'">
+                  {{ node.isConnected ? 'Yes' : 'No' }}
+                </span>
+              </span>
+              <span role="cell">
                 <span class="status" [attr.data-status]="node.status">{{ node.status | titlecase }}</span>
               </span>
-              <span role="cell">{{ node.height | number }}</span>
-              <span role="cell" class="latency" [class.good]="node.latencyMs < 100" [class.warning]="node.latencyMs >= 100 && node.latencyMs < 500" [class.bad]="node.latencyMs >= 500">
-                {{ node.latencyMs }} ms
+              <span role="cell">{{ node.heartbeatAgeMs !== null ? formatWaitMs(node.heartbeatAgeMs) : '—' }}</span>
+              <span role="cell">{{ node.commitIndex !== null ? (node.commitIndex | number) : '—' }}</span>
+              <span role="cell">
+                {{ node.committeeRegistered !== null ? node.committeeRegistered + '/' + node.committeeTotal : '—' }}
               </span>
-              <span role="cell">{{ formatUptime(node.uptimeSeconds) }}</span>
-              <span role="cell" class="version">{{ node.version }}</span>
+              <span role="cell">{{ node.blocker ?? '—' }}</span>
             </div>
           </ng-container>
 
@@ -1106,20 +1089,31 @@ interface NodeHealth {
 })
 export class ValidatorsPageComponent implements OnInit, OnDestroy {
   private nodes: NodeInfo[] = [];
+  private networkInfoData: any = null;
   private destroy$ = new Subject<void>();
 
   private readonly nodes$ = interval(10000).pipe(
     takeUntil(this.destroy$),
-    switchMap(() => this.data.fetchNodes()),
-    map(nodesData => nodesData.map(n => ({
-      nodeId: n.node_id,
-      address: n.address,
-      status: n.status,
-      height: n.height,
-      latencyMs: n.latency_ms,
-      version: n.version,
-      uptimeSeconds: n.uptime_seconds
-    })))
+    switchMap(() => this.data.fetchNetworkInfo()),
+    map(networkInfo => {
+      this.networkInfoData = networkInfo;
+      // Map peers from the new network info endpoint
+      return networkInfo.peers.map(peer => ({
+        nodeId: peer.peer_id ?? 'unknown',
+        address: peer.peer_id ?? '',
+        status: peer.is_connected ? 'online' as const : 'offline' as const,
+        isConnected: peer.is_connected,
+        heartbeatAgeMs: peer.heartbeat_age_ms,
+        commitIndex: peer.commit_index,
+        committeeRegistered: peer.committee_registered,
+        committeeTotal: peer.committee_total,
+        blocker: peer.blocker,
+        height: 0,
+        latencyMs: peer.heartbeat_age_ms ?? 0,
+        version: 'unknown',
+        uptimeSeconds: 0
+      }));
+    })
   );
 
   readonly viewModel$: Observable<ValidatorsViewModel> = combineLatest([
@@ -1139,67 +1133,13 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
     private readonly cdr: ChangeDetectorRef
   ) {}
 
-  readonly nodeUrls = NODE_URLS;
-  selectedNodeUrl = NODE_URLS[0].url;
-  selectedNodeHealth: NodeHealth | null = null;
-  nodeHealthMap: Map<string, NodeHealth> = new Map();
-
   async ngOnInit(): Promise<void> {
-    await this.checkAllNodesHealth();
     this.cdr.detectChanges();
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-  }
-
-  async checkAllNodesHealth(): Promise<void> {
-    for (const node of NODE_URLS) {
-      const health = await this.checkNodeHealth(node.url);
-      const nodeHealth: NodeHealth = {
-        url: node.url,
-        label: node.label,
-        ...health
-      };
-      this.nodeHealthMap.set(node.url, nodeHealth);
-      if (node.url === this.selectedNodeUrl) {
-        this.selectedNodeHealth = nodeHealth;
-      }
-    }
-    this.cdr.detectChanges();
-  }
-
-  private async checkNodeHealth(nodeUrl: string): Promise<{ healthy: boolean; latencyMs: number; version: string; height: number; peers: number }> {
-    const start = performance.now();
-    try {
-      const response = await fetch(`${nodeUrl}/health`, {
-        method: 'GET'
-      });
-      const latencyMs = Math.round(performance.now() - start);
-      if (!response.ok) {
-        return { healthy: false, latencyMs, version: '', height: 0, peers: 0 };
-      }
-      const data = await response.json();
-      return {
-        healthy: true,
-        latencyMs,
-        version: data.version || '',
-        height: data.block_height || data.height || 0,
-        peers: data.network?.peerCount || data.peers || 0
-      };
-    } catch {
-      return { healthy: false, latencyMs: Math.round(performance.now() - start), version: '', height: 0, peers: 0 };
-    }
-  }
-
-  onNodeChange(event: Event): void {
-    const select = event.target as HTMLSelectElement;
-    this.selectedNodeUrl = select.value;
-    this.selectedNodeHealth = this.nodeHealthMap.get(select.value) || null;
-    this.data.nodeOverrideUrl = select.value;
-    this.data.refreshNow();
-    this.cdr.detectChanges();
   }
 
   toNumber(value: PositiveInteger): number {
@@ -1263,6 +1203,21 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
     return `${minutes}m ${seconds % 60}s`;
   }
 
+  formatStake(stake: number): string {
+    if (stake >= 1_000_000) {
+      return (stake / 1_000_000).toFixed(1) + 'M';
+    }
+    if (stake >= 1_000) {
+      return (stake / 1_000).toFixed(1) + 'K';
+    }
+    return stake.toString();
+  }
+
+  formatReputation(score: number): string {
+    if (score === 0) return '—';
+    return (score * 100).toFixed(1) + '%';
+  }
+
   trackByPeerReadiness(_: number, peer: { peerId: string }): string {
     return peer.peerId;
   }
@@ -1274,44 +1229,58 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
   ): ValidatorsViewModel {
     assert(stats !== undefined, 'Network stats must be defined');
 
-    // Extract unique validators from block data
-    const validatorMap = new Map<string, { lastBlockTime: UnixMs | null }>();
+    // Use validators from networkInfo (staking) if available, otherwise fall back to block extraction
+    let validators: ValidatorInfo[];
+    
+    if (this.networkInfoData?.validators?.length > 0) {
+      // Use validators from staking via get_network_info
+      validators = this.networkInfoData.validators.map((v: any, index: number) => ({
+        id: `validator-${index}`,
+        address: v.address as AccountAddress,
+        lastBlockTime: null, // Not available in staking data
+        isActive: v.is_active,
+        stake: parseFloat(v.stake_amount),
+        reputation: v.reputation_score ?? 0
+      }));
+    } else {
+      // Fall back to extracting from blocks (legacy behavior)
+      const validatorMap = new Map<string, { lastBlockTime: UnixMs | null }>();
 
-    for (const block of blocks) {
-      const miner = block.miner as string;
-      const existing = validatorMap.get(miner);
-      if (existing) {
-        if (!existing.lastBlockTime || (block.timestamp as number) > (existing.lastBlockTime as number)) {
-          existing.lastBlockTime = block.timestamp;
+      for (const block of blocks) {
+        const miner = block.miner as string;
+        const existing = validatorMap.get(miner);
+        if (existing) {
+          if (!existing.lastBlockTime || (block.timestamp as number) > (existing.lastBlockTime as number)) {
+            existing.lastBlockTime = block.timestamp;
+          }
+        } else {
+          validatorMap.set(miner, {
+            lastBlockTime: block.timestamp
+          });
         }
-      } else {
-        validatorMap.set(miner, {
-          lastBlockTime: block.timestamp
-        });
-      }
 
-      // Also track committee members if available
-      if (block.delegateSet) {
-        for (const member of block.delegateSet) {
-          const memberStr = member as string;
-          if (!validatorMap.has(memberStr)) {
-            validatorMap.set(memberStr, { lastBlockTime: null });
+        if (block.delegateSet) {
+          for (const member of block.delegateSet) {
+            const memberStr = member as string;
+            if (!validatorMap.has(memberStr)) {
+              validatorMap.set(memberStr, { lastBlockTime: null });
+            }
           }
         }
       }
-    }
 
-    // Build validator info list
-    const validators: ValidatorInfo[] = Array.from(validatorMap.entries())
-      .map(([address, data], index) => ({
-        id: `validator-${index}`,
-        address: address as AccountAddress,
-        lastBlockTime: data.lastBlockTime,
-        isActive: data.lastBlockTime !== null,
-        stake: 0 // Stake info not available from block data
-      }))
-      .sort((a, b) => (b.lastBlockTime ?? 0) - (a.lastBlockTime ?? 0))
-      .slice(0, MAX_VALIDATORS);
+      validators = Array.from(validatorMap.entries())
+        .map(([address, data], index) => ({
+          id: `validator-${index}`,
+          address: address as AccountAddress,
+          lastBlockTime: data.lastBlockTime,
+          isActive: data.lastBlockTime !== null,
+          stake: 0,
+          reputation: 0
+        }))
+        .sort((a: ValidatorInfo, b: ValidatorInfo) => (b.lastBlockTime ?? 0) - (a.lastBlockTime ?? 0))
+        .slice(0, MAX_VALIDATORS);
+    }
 
     // Calculate average block time
     let avgBlockTime = 0;
@@ -1325,10 +1294,16 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
     const activeCount = validators.filter(v => v.isActive).length;
     const participation = validators.length > 0 ? (activeCount / Math.max(stats.activeValidators, validators.length)) * 100 : 0;
 
-    const fallbackNodes = (health?.network.connectedPeers ?? []).map((peerId, idx) => ({
+    const fallbackNodes: NodeInfo[] = (health?.network.connectedPeers ?? []).map((peerId) => ({
       nodeId: peerId,
       address: peerId,
       status: 'online' as const,
+      isConnected: true,
+      heartbeatAgeMs: null,
+      commitIndex: null,
+      committeeRegistered: null,
+      committeeTotal: null,
+      blocker: null,
       height: this.toNumber(stats.currentHeight),
       latencyMs: Math.round(health?.network.averageLatencyMs ?? 0),
       version: health?.version ?? 'unknown',

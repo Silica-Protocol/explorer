@@ -4,6 +4,7 @@ import { ActivatedRoute, ParamMap, RouterModule } from '@angular/router';
 import { map, switchMap, catchError, startWith } from 'rxjs/operators';
 import { Observable, from, of } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatBlockHeight, formatHash, formatTimestamp } from '@shared/util/format';
 import type { AttoValue } from '@shared/models/common';
 import type { BlockDetails } from '@shared/models/block.model';
 import type { TransactionSummary } from '@shared/models/transaction.model';
@@ -26,23 +27,32 @@ type BlockHash = BlockDetails['hash'];
           <header class="block-detail__header">
             <div>
               <p class="block-detail__label">Block</p>
-              <h1 id="block-heading">{{ vm.block.height | number }}</h1>
-              <p class="block-detail__hash">{{ vm.block.hash }}</p>
+              <h1 id="block-heading">
+                <span class="block-formatted">{{ formatBlockHeight(vm.block.height) }}</span>
+                <span class="block-raw">#{{ vm.block.height | number }}</span>
+              </h1>
+              <p class="block-timestamp">{{ formatTimestamp(vm.block.timestamp) }}</p>
             </div>
             <div class="block-detail__status" [class.block-detail__status--finalized]="vm.block.status === 'finalized'">
               {{ vm.block.status | titlecase }}
             </div>
           </header>
 
-          <section class="block-detail__overview" aria-label="Block metrics">
+          <section class="block-detail__overview" aria-label="Block details">
             <article>
-              <h2>Timestamp</h2>
-              <p>{{ vm.block.timestamp | date: 'medium' }}</p>
+              <h2>Block Hash</h2>
+              <p class="hash-value">{{ vm.block.hash }}</p>
             </article>
             <article>
-              <h2>Parent</h2>
-              <p *ngIf="vm.block.parentHash; else noParent">{{ vm.block.parentHash }}</p>
-              <ng-template #noParent><span class="muted">Genesis</span></ng-template>
+              <h2>Parent Hash</h2>
+              <p *ngIf="vm.block.parentHash; else noParent" class="hash-value">
+                <a [routerLink]="['/block', vm.block.parentHash]">{{ vm.block.parentHash }}</a>
+              </p>
+              <ng-template #noParent><span class="muted">Genesis (no parent)</span></ng-template>
+            </article>
+            <article>
+              <h2>Validator</h2>
+              <p class="hash-value">{{ vm.block.miner }}</p>
             </article>
             <article>
               <h2>Transactions</h2>
@@ -51,14 +61,6 @@ type BlockHash = BlockDetails['hash'];
             <article>
               <h2>Total Value</h2>
               <p>{{ formatCoins(vm.block.totalValue) }} CHRT</p>
-            </article>
-            <article>
-              <h2>Validator</h2>
-              <p>{{ vm.block.miner }}</p>
-            </article>
-            <article>
-              <h2>Confirmation Score</h2>
-              <p>{{ vm.block.confirmationScore }}</p>
             </article>
           </section>
 
@@ -142,6 +144,33 @@ type BlockHash = BlockDetails['hash'];
         font-size: 0.75rem;
       }
 
+      .block-detail__header h1 {
+        margin: 0.25rem 0 0;
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .block-formatted {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--accent);
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+      }
+
+      .block-raw {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+      }
+
+      .block-timestamp {
+        margin: 0.5rem 0 0;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      }
+
       .block-detail__hash {
         margin: 0.5rem 0 0;
         font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
@@ -165,7 +194,7 @@ type BlockHash = BlockDetails['hash'];
 
       .block-detail__overview {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 1rem;
       }
 
@@ -174,11 +203,12 @@ type BlockHash = BlockDetails['hash'];
         border: 1px solid var(--panel-border);
         border-radius: 18px;
         padding: 1.25rem;
+        min-width: 0;
       }
 
       .block-detail__overview h2 {
         margin: 0;
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         color: var(--text-secondary);
         font-weight: 500;
         text-transform: uppercase;
@@ -187,8 +217,23 @@ type BlockHash = BlockDetails['hash'];
 
       .block-detail__overview p {
         margin: 0.45rem 0 0;
-        font-size: 1.05rem;
+        font-size: 1rem;
         word-break: break-all;
+        overflow-wrap: break-word;
+      }
+
+      .hash-value {
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.85rem;
+      }
+
+      .hash-value a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .hash-value a:hover {
+        text-decoration: underline;
       }
 
       .transactions {
@@ -341,9 +386,9 @@ export class BlockDetailComponent {
     return tx.hash;
   }
 
-  formatHash(value: string): string {
-    return value.length > 12 ? `${value.slice(0, 12)}…${value.slice(-4)}` : value;
-  }
+  formatHash = formatHash;
+  formatBlockHeight = formatBlockHeight;
+  formatTimestamp = formatTimestamp;
 
   formatCoins(value: AttoValue): string {
     const normalized = Number(value);

@@ -4,6 +4,7 @@ import { ActivatedRoute, ParamMap, RouterModule } from '@angular/router';
 import { map, switchMap, of } from 'rxjs';
 import { Observable } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatBlockHeight } from '@shared/util/format';
 import type { AttoValue } from '@shared/models/common';
 import type { BlockSummary } from '@shared/models/block.model';
 import type { TransactionDetails } from '@shared/models/transaction.model';
@@ -16,11 +17,13 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
     <ng-container *ngIf="viewModel$ | async">
       <section class="tx-detail" *ngIf="transaction; else notFound" aria-labelledby="tx-heading">
         <header class="tx-detail__header">
-          <div>
+          <div class="tx-detail__header-content">
             <p class="tx-detail__label">Transaction</p>
-            <h1 id="tx-heading">{{ transaction.hash }}</h1>
-            <p class="muted" *ngIf="transaction.blockHeight">Included in block {{ transaction.blockHeight | number }}</p>
-            <p class="muted" *ngIf="!transaction.blockHeight">Block info unavailable</p>
+            <h1 id="tx-heading" class="tx-hash">{{ transaction.hash }}</h1>
+            <div class="tx-detail__meta" *ngIf="transaction.blockHeight">
+              <span class="tx-block">Block <a [routerLink]="['/block', transaction.blockHash]">#{{ transaction.blockHeight | number }}</a></span>
+              <span class="tx-confirmations" *ngIf="transaction.confirmations > 0">{{ transaction.confirmations }} confirmations</span>
+            </div>
           </div>
           <div class="tx-detail__status" [class.tx-detail__status--confirmed]="transaction.status === 'confirmed'">
             {{ transaction.status | titlecase }}
@@ -28,10 +31,6 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
         </header>
 
         <section class="tx-detail__grid" aria-label="Transaction overview">
-          <article *ngIf="transaction.blockHash">
-            <h2>Block</h2>
-            <p><a [routerLink]="['/block', transaction.blockHash]">{{ transaction.blockHash }}</a></p>
-          </article>
           <article class="tx-row">
             <span class="tx-row__item">
               <span class="tx-row__label">Value</span>
@@ -43,22 +42,22 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
             </span>
             <span class="tx-row__item">
               <span class="tx-row__label">Timestamp</span>
-              <span class="tx-row__value">{{ transaction.timestamp | date:'yyyy MMM dd, h:mm:ss a' }}</span>
+              <span class="tx-row__value">{{ transaction.timestamp | date:'medium' }}</span>
             </span>
           </article>
-          <article class="tx-address">
-            <h2>From</h2>
-            <p><a [routerLink]="['/account', transaction.from]">{{ transaction.from }}</a></p>
-          </article>
-          <article class="tx-address">
-            <h2>To</h2>
-            <p><a [routerLink]="['/account', transaction.to]">{{ transaction.to }}</a></p>
-          </article>
-          <article *ngIf="transaction.confirmations > 0">
-            <h2>Confirmations</h2>
-            <p>{{ transaction.confirmations }}</p>
-          </article>
-          <article *ngIf="transaction.memo">
+
+          <div class="tx-addresses">
+            <article class="tx-address">
+              <h2>From</h2>
+              <p><a [routerLink]="['/account', transaction.from]">{{ transaction.from }}</a></p>
+            </article>
+            <article class="tx-address">
+              <h2>To</h2>
+              <p><a [routerLink]="['/account', transaction.to]">{{ transaction.to }}</a></p>
+            </article>
+          </div>
+
+          <article *ngIf="transaction.memo" class="tx-memo">
             <h2>Memo</h2>
             <p>{{ transaction.memo }}</p>
           </article>
@@ -83,12 +82,8 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
           <h2>Block Summary</h2>
           <div class="block-summary">
             <div>
-              <h3>Hash</h3>
-              <p>{{ block.hash }}</p>
-            </div>
-            <div>
-              <h3>Validator</h3>
-              <p>{{ block.miner }}</p>
+              <h3>Block</h3>
+              <p><a [routerLink]="['/block', block.hash]">{{ formatBlockHeight(block.height) }}</a></p>
             </div>
             <div>
               <h3>Status</h3>
@@ -97,6 +92,10 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
             <div>
               <h3>Transactions</h3>
               <p>{{ block.transactionCount }}</p>
+            </div>
+            <div>
+              <h3>Timestamp</h3>
+              <p>{{ block.timestamp | date:'medium' }}</p>
             </div>
           </div>
         </section>
@@ -134,11 +133,16 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
         display: flex;
         justify-content: space-between;
         gap: 1rem;
-        align-items: center;
+        align-items: flex-start;
         padding: 1.5rem;
         border: 1px solid var(--panel-border);
         border-radius: 18px;
         background: var(--panel-bg);
+      }
+
+      .tx-detail__header-content {
+        flex: 1;
+        min-width: 0;
       }
 
       .tx-detail__label {
@@ -147,6 +151,43 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
         letter-spacing: 0.08em;
         text-transform: uppercase;
         font-size: 0.75rem;
+      }
+
+      .tx-hash {
+        margin: 0.25rem 0 0;
+        font-size: 1rem;
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+        word-break: break-all;
+      }
+
+      .tx-detail__meta {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+      }
+
+      .tx-block a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .tx-block a:hover {
+        text-decoration: underline;
+      }
+
+      .tx-confirmations {
+        color: var(--text-secondary);
+      }
+
+      .tx-detail__status {
+        padding: 0.35rem 0.9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        background: rgba(14, 165, 233, 0.05);
+        letter-spacing: 0.05em;
+        font-size: 0.85rem;
+        white-space: nowrap;
       }
 
       .tx-detail__status {
@@ -176,6 +217,35 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
         display: flex;
         justify-content: space-between;
         gap: 1rem;
+        grid-column: 1 / -1;
+      }
+
+      .tx-addresses {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        grid-column: 1 / -1;
+      }
+
+      .tx-address {
+        grid-column: auto;
+      }
+
+      .tx-address p {
+        word-break: break-all;
+      }
+
+      .tx-address a {
+        color: var(--accent-light);
+        text-decoration: none;
+        font-size: 0.9rem;
+      }
+
+      .tx-address a:hover {
+        text-decoration: underline;
+      }
+
+      .tx-memo {
         grid-column: 1 / -1;
       }
 
@@ -379,4 +449,6 @@ export class TransactionDetailComponent {
     const normalized = Number(value);
     return normalized.toLocaleString(undefined, { maximumFractionDigits: 6 });
   }
+
+  formatBlockHeight = formatBlockHeight;
 }
