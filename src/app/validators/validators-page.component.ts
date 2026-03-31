@@ -382,6 +382,35 @@ const MAX_VALIDATORS = 128;
         </div>
       </section>
 
+      <section class="validators__startup" aria-label="Tephra gossip telemetry" *ngIf="vm.health as health">
+        <div class="section-heading">
+          <h2>Tephra Gossip</h2>
+          <p class="muted">Hashgraph event sync telemetry exposed by the node health endpoint.</p>
+        </div>
+
+        <div class="startup-grid">
+          <article class="startup-card">
+            <h3>Sync Rounds</h3>
+            <p class="startup-value">{{ health.consensus.tephraGossipSyncRounds | number }}</p>
+          </article>
+
+          <article class="startup-card">
+            <h3>Events Ingested</h3>
+            <p class="startup-value">{{ health.consensus.tephraEventsIngested | number }}</p>
+          </article>
+
+          <article class="startup-card">
+            <h3>Events Sent</h3>
+            <p class="startup-value">{{ health.consensus.tephraEventsSent | number }}</p>
+          </article>
+
+          <article class="startup-card">
+            <h3>Event Store Size</h3>
+            <p class="startup-value">{{ health.consensus.tephraEventStoreSize | number }}</p>
+          </article>
+        </div>
+      </section>
+
       <!-- Validators List -->
       <section class="validators__list" aria-label="Validators list">
         <div class="section-heading">
@@ -1097,22 +1126,7 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
     switchMap(() => this.data.fetchNetworkInfo()),
     map(networkInfo => {
       this.networkInfoData = networkInfo;
-      // Map peers from the new network info endpoint
-      return networkInfo.peers.map(peer => ({
-        nodeId: peer.peer_id ?? 'unknown',
-        address: peer.peer_id ?? '',
-        status: peer.is_connected ? 'online' as const : 'offline' as const,
-        isConnected: peer.is_connected,
-        heartbeatAgeMs: peer.heartbeat_age_ms,
-        commitIndex: peer.commit_index,
-        committeeRegistered: peer.committee_registered,
-        committeeTotal: peer.committee_total,
-        blocker: peer.blocker,
-        height: 0,
-        latencyMs: peer.heartbeat_age_ms ?? 0,
-        version: 'unknown',
-        uptimeSeconds: 0
-      }));
+      return this.mapPeerNodes(networkInfo.peers);
     })
   );
 
@@ -1220,6 +1234,67 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
 
   trackByPeerReadiness(_: number, peer: { peerId: string }): string {
     return peer.peerId;
+  }
+
+  private mapPeerNodes(peers: ReadonlyArray<{
+    peer_id: string | null;
+    is_connected: boolean;
+    status: string;
+    heartbeat_age_ms: number | null;
+    commit_index: number | null;
+    committee_registered: boolean | null;
+    committee_total: number | null;
+    blocker: string | null;
+  }>): NodeInfo[] {
+    const mapped = new Map<string, NodeInfo>();
+
+    for (const peer of peers) {
+      const nodeId = typeof peer.peer_id === 'string' ? peer.peer_id.trim() : '';
+      if (nodeId.length === 0) {
+        continue;
+      }
+
+      const next: NodeInfo = {
+        nodeId,
+        address: nodeId,
+        status: peer.is_connected ? 'online' : 'offline',
+        isConnected: peer.is_connected,
+        heartbeatAgeMs: peer.heartbeat_age_ms,
+        commitIndex: peer.commit_index,
+        committeeRegistered: peer.committee_registered,
+        committeeTotal: peer.committee_total,
+        blocker: peer.blocker,
+        height: 0,
+        latencyMs: peer.heartbeat_age_ms ?? 0,
+        version: 'unknown',
+        uptimeSeconds: 0
+      };
+
+      const current = mapped.get(nodeId);
+      if (!current) {
+        mapped.set(nodeId, next);
+        continue;
+      }
+
+      mapped.set(nodeId, {
+        ...current,
+        status: next.isConnected ? next.status : current.status,
+        isConnected: current.isConnected || next.isConnected,
+        heartbeatAgeMs: next.heartbeatAgeMs ?? current.heartbeatAgeMs,
+        commitIndex: next.commitIndex ?? current.commitIndex,
+        committeeRegistered: next.committeeRegistered ?? current.committeeRegistered,
+        committeeTotal: next.committeeTotal ?? current.committeeTotal,
+        blocker: current.blocker ?? next.blocker,
+        latencyMs: next.latencyMs || current.latencyMs
+      });
+    }
+
+    return Array.from(mapped.values()).sort((left, right) => {
+      if (left.isConnected !== right.isConnected) {
+        return left.isConnected ? -1 : 1;
+      }
+      return left.nodeId.localeCompare(right.nodeId);
+    });
   }
 
   private buildViewModel(

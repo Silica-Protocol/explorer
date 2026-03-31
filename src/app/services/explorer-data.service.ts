@@ -61,6 +61,10 @@ export interface HealthData {
     readonly dagFinalityGap: number;
     readonly txQueueSize: number;
     readonly pendingFinalityCerts: number;
+    readonly tephraGossipSyncRounds: number;
+    readonly tephraEventsIngested: number;
+    readonly tephraEventsSent: number;
+    readonly tephraEventStoreSize: number;
     readonly validatorCount: number;
     readonly committeeSize: number;
     readonly epoch: number;
@@ -1644,6 +1648,10 @@ export class ExplorerDataService implements OnDestroy {
       let dagFinalityGap = 0;
       let txQueueSize = 0;
       let pendingFinalityCerts = 0;
+      let tephraGossipSyncRounds = 0;
+      let tephraEventsIngested = 0;
+      let tephraEventsSent = 0;
+      let tephraEventStoreSize = 0;
       let consensusValidatorCount: number | undefined;
       let isSynced = false;
       let epoch = 0;
@@ -1691,6 +1699,18 @@ export class ExplorerDataService implements OnDestroy {
           dagFinalityGap = typeof cs['dag_finality_gap'] === 'number' ? cs['dag_finality_gap'] as number : 0;
           txQueueSize = typeof cs['tx_queue_size'] === 'number' ? cs['tx_queue_size'] as number : 0;
           pendingFinalityCerts = typeof cs['pending_finality_certs'] === 'number' ? cs['pending_finality_certs'] as number : 0;
+          tephraGossipSyncRounds = typeof cs['tephra_gossip_sync_rounds'] === 'number'
+            ? cs['tephra_gossip_sync_rounds'] as number
+            : 0;
+          tephraEventsIngested = typeof cs['tephra_events_ingested'] === 'number'
+            ? cs['tephra_events_ingested'] as number
+            : 0;
+          tephraEventsSent = typeof cs['tephra_events_sent'] === 'number'
+            ? cs['tephra_events_sent'] as number
+            : 0;
+          tephraEventStoreSize = typeof cs['tephra_event_store_size'] === 'number'
+            ? cs['tephra_event_store_size'] as number
+            : 0;
           committeeSize = typeof cs['committee_size'] === 'number' ? cs['committee_size'] as number : 0;
           epoch = typeof cs['epoch'] === 'number' ? cs['epoch'] as number : 0;
           epochDurationMs = typeof cs['epoch_duration_ms'] === 'number' ? cs['epoch_duration_ms'] as number : 0;
@@ -1769,6 +1789,10 @@ export class ExplorerDataService implements OnDestroy {
             dagFinalityGap,
             txQueueSize,
             pendingFinalityCerts,
+            tephraGossipSyncRounds,
+            tephraEventsIngested,
+            tephraEventsSent,
+            tephraEventStoreSize,
             validatorCount: consensusValidatorCount ?? 0,
             committeeSize,
             epoch,
