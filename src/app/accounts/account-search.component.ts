@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatTransactionIdForDisplay, toTransactionRouteParam as toExplorerTransactionRouteParam } from '@shared/util/transaction-id';
 import type { TransactionHistoryResult } from '@silica-protocol/node-models';
 
 interface AccountLookupState {
@@ -80,9 +81,9 @@ interface AccountLookupState {
           <div class="history__list" *ngIf="state.history.transactions.length > 0; else empty">
             <a
               *ngFor="let tx of state.history.transactions"
-              [routerLink]="['/transaction', tx.tx_id]"
+              [routerLink]="['/transaction', toTransactionRouteParam(tx.tx_id)]"
             >
-              <span>{{ tx.tx_id.slice(0, 12) }}…</span>
+              <span>{{ formatTransactionPreview(tx.tx_id) }}</span>
               <span>{{ tx.direction }}</span>
               <span>{{ tx.amount }}</span>
               <span>{{ tx.status }}</span>
@@ -348,6 +349,15 @@ export class AccountSearchComponent {
       return (numeric / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 });
     }
     return value;
+  }
+
+  formatTransactionPreview(value: string): string {
+    const formatted = formatTransactionIdForDisplay(value);
+    return formatted.length > 12 ? `${formatted.slice(0, 12)}…` : formatted;
+  }
+
+  toTransactionRouteParam(value: string): string {
+    return toExplorerTransactionRouteParam(value);
   }
 
   private isLikelyAccountAddress(value: string): boolean {

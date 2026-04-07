@@ -5,6 +5,7 @@ import { map, switchMap, of } from 'rxjs';
 import { Observable } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import { formatBlockHeight } from '@shared/util/format';
+import { formatTransactionIdForDisplay, parseTransactionIdInput } from '@shared/util/transaction-id';
 import type { AttoValue } from '@shared/models/common';
 import type { BlockSummary } from '@shared/models/block.model';
 import type { TransactionDetails } from '@shared/models/transaction.model';
@@ -19,7 +20,7 @@ import type { TransactionDetails } from '@shared/models/transaction.model';
         <header class="tx-detail__header">
           <div class="tx-detail__header-content">
             <p class="tx-detail__label">Transaction</p>
-            <h1 id="tx-heading" class="tx-hash">{{ transaction.hash }}</h1>
+            <h1 id="tx-heading" class="tx-hash" [title]="transaction.hash">{{ formatTransactionId(transaction.hash) }}</h1>
             <div class="tx-detail__meta" *ngIf="transaction.blockHeight">
               <span class="tx-block">Block <a [routerLink]="['/block', transaction.blockHash]">#{{ transaction.blockHeight | number }}</a></span>
               <span class="tx-confirmations" *ngIf="transaction.confirmations > 0">{{ transaction.confirmations }} confirmations</span>
@@ -410,6 +411,7 @@ export class TransactionDetailComponent {
   readonly viewModel$: Observable<{ transaction: TransactionDetails | undefined; block: BlockSummary | undefined; loading: boolean }> =
     this.route.paramMap.pipe(
       map((params: ParamMap) => params.get('hash')),
+      map((hash: string | null) => (hash ? parseTransactionIdInput(hash) : null)),
       switchMap((hash: string | null) => {
         this.loading = true;
         this.transaction = undefined;
@@ -448,6 +450,10 @@ export class TransactionDetailComponent {
   formatCoins(value: AttoValue): string {
     const normalized = Number(value);
     return normalized.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  }
+
+  formatTransactionId(value: string): string {
+    return formatTransactionIdForDisplay(value);
   }
 
   formatBlockHeight = formatBlockHeight;

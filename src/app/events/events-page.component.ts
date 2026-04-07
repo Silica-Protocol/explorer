@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatTransactionIdForDisplay, parseTransactionIdInput, toTransactionRouteParam as toExplorerTransactionRouteParam } from '@shared/util/transaction-id';
 
 interface EventLog {
   address: string;
@@ -84,7 +85,7 @@ interface EventLog {
 
               <div class="event-card__tx">
                 <span class="label">Transaction:</span>
-                <a [routerLink]="['/transaction', event.transactionHash]" class="tx-link">{{ formatAddress(event.transactionHash) }}</a>
+                <a [routerLink]="['/transaction', toTransactionRouteParam(event.transactionHash)]" class="tx-link">{{ formatTransactionHash(event.transactionHash) }}</a>
               </div>
 
               <div class="event-card__topics">
@@ -382,7 +383,7 @@ export class EventsPageComponent implements OnInit {
       this.addressFilter = address;
     }
     if (tx) {
-      this.txFilter = tx;
+      this.txFilter = formatTransactionIdForDisplay(tx);
     }
 
     await this.searchEvents();
@@ -407,7 +408,7 @@ export class EventsPageComponent implements OnInit {
         params.address = this.addressFilter;
       }
       if (this.txFilter) {
-        params.transactionHash = this.txFilter;
+        params.transactionHash = parseTransactionIdInput(this.txFilter);
       }
 
       const events = await this.data.fetchEvents(params).catch(() => []);
@@ -433,5 +434,13 @@ export class EventsPageComponent implements OnInit {
   formatAddress(address: string): string {
     if (!address) return '';
     return address.length > 16 ? `${address.slice(0, 10)}…${address.slice(-4)}` : address;
+  }
+
+  formatTransactionHash(hash: string): string {
+    return this.formatAddress(formatTransactionIdForDisplay(hash));
+  }
+
+  toTransactionRouteParam(hash: string): string {
+    return toExplorerTransactionRouteParam(hash);
   }
 }

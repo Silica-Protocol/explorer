@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatTransactionIdForDisplay, isTransactionIdLookupTerm, toTransactionRouteParam } from '@shared/util/transaction-id';
 import type { GetTransactionResult as NodeGetTransactionResult } from '@silica-protocol/node-models';
 
 @Component({
@@ -39,13 +40,13 @@ import type { GetTransactionResult as NodeGetTransactionResult } from '@silica-p
             <h2>Result</h2>
             <p class="muted">Status: {{ result.status | titlecase }}</p>
           </div>
-          <a *ngIf="result.tx_id" [routerLink]="['/transaction', result.tx_id]" class="link">Open detail</a>
+          <a *ngIf="result.tx_id" [routerLink]="['/transaction', toTransactionRouteParam(result.tx_id)]" class="link">Open detail</a>
         </header>
 
         <div class="result-card__grid">
           <article>
-            <h3>Hash</h3>
-            <p>{{ result.tx_id }}</p>
+            <h3>Transaction ID</h3>
+            <p>{{ formatTransactionId(result.tx_id ?? '') }}</p>
           </article>
           <article *ngIf="result.sender">
             <h3>From</h3>
@@ -241,7 +242,7 @@ export class TransactionSearchComponent {
     }
 
     if (!this.isLikelyTransactionId(hash)) {
-      this.error = 'Enter a valid transaction ID (GUID or 64-char hash).';
+        this.error = 'Enter a valid transaction ID (GUID, 0x-guid, or 64-char hash).';
       this.result = null;
       return;
     }
@@ -263,8 +264,14 @@ export class TransactionSearchComponent {
   }
 
   private isLikelyTransactionId(value: string): boolean {
-    const trimmed = value.trim();
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)
-      || /^(?:0x)?[0-9a-f]{64}$/i.test(trimmed);
+    return isTransactionIdLookupTerm(value);
+  }
+
+  formatTransactionId(value: string): string {
+    return formatTransactionIdForDisplay(value);
+  }
+
+  toTransactionRouteParam(value: string): string {
+    return toTransactionRouteParam(value);
   }
 }

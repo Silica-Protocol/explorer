@@ -7,6 +7,7 @@ import { EXPLORER_DATA_CONFIG, ExplorerDataConfig } from '@app/services/explorer
 import { EXPLORER_BACKEND_CONFIG, ExplorerBackendConfig } from '@services/explorer-backend.config';
 import { DeterministicRandom } from '@shared/util/deterministic-rng';
 import { assert } from '@shared/util/assert';
+import { isTransactionIdLookupTerm, parseTransactionIdInput } from '@shared/util/transaction-id';
 import type {
   GetBlocksResult as NodeGetBlocksResult,
   Block as NodeBlock,
@@ -261,7 +262,7 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   async fetchTransactionByHash(txId: string): Promise<NodeGetTransactionResult> {
-    const trimmed = txId.trim();
+    const trimmed = parseTransactionIdInput(txId);
     assert(trimmed.length > 0, 'Transaction hash must not be empty');
     return await this.jsonRpcCall<NodeGetTransactionResult>('get_transaction', { tx_id: trimmed });
   }
@@ -282,7 +283,7 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   async fetchTransactionByHashFromNode(txHash: string): Promise<TransactionDetails | null> {
-    const trimmed = txHash.trim();
+    const trimmed = parseTransactionIdInput(txHash);
     if (trimmed.length === 0) {
       return null;
     }
@@ -354,7 +355,7 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   async searchTransactions(query: string, limit: number = 10): Promise<readonly TransactionDetails[]> {
-    const trimmed = query.trim();
+    const trimmed = parseTransactionIdInput(query);
     if (trimmed.length === 0) {
       return [];
     }
@@ -969,7 +970,7 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   getTransactionDetails(hash: Hash): TransactionDetails | undefined {
-    return this.transactionDetails.get(hash);
+    return this.transactionDetails.get(parseTransactionIdInput(hash) as Hash);
   }
 
   getAccountSnapshot(address: AccountAddress): AccountActivitySnapshot | undefined {
@@ -2120,9 +2121,6 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   private isLikelyTransactionLookup(term: string): boolean {
-    const trimmed = term.trim();
-    const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed);
-    const isHash = /^(?:0x)?[0-9a-f]{64}$/i.test(trimmed);
-    return isGuid || isHash;
+    return isTransactionIdLookupTerm(term);
   }
 }

@@ -4,6 +4,8 @@ import { ActivatedRoute, ParamMap, RouterModule } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatHash as truncateHash } from '@shared/util/format';
+import { formatTransactionIdForDisplay, toTransactionRouteParam as toExplorerTransactionRouteParam } from '@shared/util/transaction-id';
 import type { AttoValue } from '@shared/models/common';
 import type { AccountActivitySnapshot } from '@shared/models/account.model';
 import type { TransactionSummary } from '@shared/models/transaction.model';
@@ -54,12 +56,12 @@ import type { BlockSummary } from '@shared/models/block.model';
               <h3>Outbound ({{ vm.snapshot.outbound.length }})</h3>
               <ul>
                 <li *ngFor="let tx of vm.snapshot.outbound; trackBy: trackByHash">
-                  <a [routerLink]="['/transaction', tx.hash]" class="tx-item">
+                  <a [routerLink]="['/transaction', toTransactionRouteParam(tx.hash)]" class="tx-item">
                     <span class="tx-item__main">
                       <span class="tx-item__to">{{ formatHash(tx.to) }}</span>
                       <span class="tx-item__amount">{{ formatCoins(tx.value) }} CHRT</span>
                     </span>
-                    <span class="tx-item__id">{{ formatHash(tx.hash) }}</span>
+                    <span class="tx-item__id">{{ formatTransactionId(tx.hash) }}</span>
                   </a>
                 </li>
               </ul>
@@ -69,12 +71,12 @@ import type { BlockSummary } from '@shared/models/block.model';
               <h3>Inbound ({{ vm.snapshot.inbound.length }})</h3>
               <ul>
                 <li *ngFor="let tx of vm.snapshot.inbound; trackBy: trackByHash">
-                  <a [routerLink]="['/transaction', tx.hash]" class="tx-item">
+                  <a [routerLink]="['/transaction', toTransactionRouteParam(tx.hash)]" class="tx-item">
                     <span class="tx-item__main">
                       <span class="tx-item__from">{{ formatHash(tx.from) }}</span>
                       <span class="tx-item__amount">{{ formatCoins(tx.value) }} CHRT</span>
                     </span>
-                    <span class="tx-item__id">{{ formatHash(tx.hash) }}</span>
+                    <span class="tx-item__id">{{ formatTransactionId(tx.hash) }}</span>
                   </a>
                 </li>
               </ul>
@@ -431,6 +433,14 @@ export class AccountDetailComponent implements OnDestroy {
 
   formatHash(value: string): string {
     return value;
+  }
+
+  formatTransactionId(value: string): string {
+    return truncateHash(formatTransactionIdForDisplay(value), 16, 4);
+  }
+
+  toTransactionRouteParam(value: string): string {
+    return toExplorerTransactionRouteParam(value);
   }
 
   formatCoins(value: AttoValue): string {

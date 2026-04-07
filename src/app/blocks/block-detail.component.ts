@@ -5,6 +5,7 @@ import { map, switchMap, catchError, startWith } from 'rxjs/operators';
 import { Observable, from, of } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import { formatBlockHeight, formatHash, formatTimestamp } from '@shared/util/format';
+import { formatTransactionIdForDisplay, toTransactionRouteParam as toExplorerTransactionRouteParam } from '@shared/util/transaction-id';
 import type { AttoValue } from '@shared/models/common';
 import type { BlockDetails } from '@shared/models/block.model';
 import type { TransactionSummary } from '@shared/models/transaction.model';
@@ -83,9 +84,9 @@ type BlockHash = BlockDetails['hash'];
                 *ngFor="let tx of vm.transactions; trackBy: trackByHash"
                 class="transaction-row"
                 role="row"
-                [routerLink]="['/transaction', tx.hash]"
+                [routerLink]="['/transaction', toTransactionRouteParam(tx.hash)]"
               >
-                <span role="cell" class="hash">{{ formatHash(tx.hash) }}</span>
+                <span role="cell" class="hash">{{ formatTransactionHash(tx.hash) }}</span>
                 <span role="cell">{{ formatHash(tx.from) }}</span>
                 <span role="cell">{{ formatHash(tx.to) }}</span>
                 <span role="cell">{{ formatCoins(tx.value) }} CHRT</span>
@@ -384,6 +385,14 @@ export class BlockDetailComponent {
 
   trackByHash(_: number, tx: TransactionSummary): TransactionSummary['hash'] {
     return tx.hash;
+  }
+
+  formatTransactionHash(hash: TransactionSummary['hash']): string {
+    return formatHash(formatTransactionIdForDisplay(hash));
+  }
+
+  toTransactionRouteParam(hash: TransactionSummary['hash']): string {
+    return toExplorerTransactionRouteParam(hash);
   }
 
   formatHash = formatHash;

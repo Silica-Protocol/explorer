@@ -10,6 +10,12 @@ import type { AccountSummary } from '@shared/models/account.model';
 import type { TransactionSummary } from '@shared/models/transaction.model';
 import type { SearchResultItem } from '@shared/models/search.model';
 import { assert } from '@shared/util/assert';
+import {
+  formatTransactionIdForDisplay,
+  isGuidBasedTransactionId,
+  toTransactionRouteParam,
+  transactionIdSearchTokens,
+} from '@shared/util/transaction-id';
 
 interface SearchViewModel {
   readonly term: string;
@@ -24,7 +30,6 @@ const TERM_MAX_LENGTH = 64;
 const SEARCH_DEBOUNCE_MS = 80;
 const CLOSE_DELAY_MS = 120;
 
-const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HEX_64_REGEX = /^(?:0x)?[0-9a-f]{64}$/i;
 const ADDRESS_REGEX = /^(?:0x[0-9a-f]{40}|[a-z][a-z0-9_-]{2,}_[a-z0-9_-]{6,})$/i;
 
@@ -298,14 +303,15 @@ export class ExplorerSearchComponent implements OnDestroy {
         if (results.length >= MAX_RESULTS) break;
         const existing = results.find(r => r.type === 'transaction' && r.id === tx.hash);
         if (!existing) {
+          const displayHash = formatTransactionIdForDisplay(tx.hash);
           results.push({
             type: 'transaction',
             id: tx.hash,
-            title: `Transaction ${tx.hash.slice(0, 16)}…`,
+            title: `Transaction ${displayHash.slice(0, 16)}…`,
             subtitle: `${tx.from.slice(0, 10)}… → ${tx.to.slice(0, 10)}…`,
             score: 5,
-            route: ['/transaction', tx.hash] as const,
-            highlight: tx.hash
+            route: ['/transaction', toTransactionRouteParam(tx.hash)] as const,
+            highlight: displayHash
           });
         }
       }
@@ -374,7 +380,7 @@ export class ExplorerSearchComponent implements OnDestroy {
         void this.router.navigate(['/block', directTerm]);
         this.close();
       } else if (this.isGuidTerm(directTerm)) {
-        void this.router.navigate(['/transaction', directTerm]);
+        void this.router.navigate(['/transaction', toTransactionRouteParam(directTerm)]);
         this.close();
       }
       return;
@@ -474,11 +480,11 @@ export class ExplorerSearchComponent implements OnDestroy {
     tx: TransactionSummary,
     normalized: string
   ): SearchResultItem | null {
-    const hash = tx.hash.toLowerCase();
+    const hashCandidates = transactionIdSearchTokens(tx.hash);
     const from = tx.from.toLowerCase();
     const to = tx.to.toLowerCase();
 
-    const matchesHash = hash.includes(normalized);
+    const matchesHash = hashCandidates.some((candidate) => candidate.includes(normalized));
     const matchesFrom = from.includes(normalized);
     const matchesTo = to.includes(normalized);
 
@@ -486,17 +492,19 @@ export class ExplorerSearchComponent implements OnDestroy {
       return null;
     }
 
-    const score = (hash.startsWith(normalized) ? 5 : 0) + (matchesHash ? 3 : 0) + ((matchesFrom || matchesTo) ? 2 : 0);
+    const startsWithHash = hashCandidates.some((candidate) => candidate.startsWith(normalized));
+    const displayHash = formatTransactionIdForDisplay(tx.hash);
+    const score = (startsWithHash ? 5 : 0) + (matchesHash ? 3 : 0) + ((matchesFrom || matchesTo) ? 2 : 0);
     assert(score > 0, 'Transaction result score must be positive when matched');
 
     return {
       type: 'transaction',
       id: tx.hash,
-      title: `Transaction ${tx.hash.slice(0, 16)}…`,
+      title: `Transaction ${displayHash.slice(0, 16)}…`,
       subtitle: `${tx.from.slice(0, 10)}… → ${tx.to.slice(0, 10)}…`,
       score,
-      route: ['/transaction', tx.hash] as const,
-      highlight: tx.hash
+      route: ['/transaction', toTransactionRouteParam(tx.hash)] as const,
+      highlight: displayHash
     } satisfies SearchResultItem;
   }
 
@@ -556,7 +564,7 @@ export class ExplorerSearchComponent implements OnDestroy {
   }
 
   private isGuidTerm(term: string): boolean {
-    return GUID_REGEX.test(term.trim());
+    return isGuidBasedTransactionId(term);
   }
 
   private isHexHashTerm(term: string): boolean {

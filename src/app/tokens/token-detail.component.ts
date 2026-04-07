@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
+import { formatTransactionIdForDisplay, toTransactionRouteParam as toExplorerTransactionRouteParam } from '@shared/util/transaction-id';
 
 interface TokenHolder {
   address: string;
@@ -128,7 +129,7 @@ interface TokenTransfer {
 
             <div *ngFor="let transfer of transfers" class="transfer-row" role="row">
               <span role="cell">
-                <a [routerLink]="['/transaction', transfer.hash]" class="tx-hash">{{ formatAddress(transfer.hash) }}</a>
+                <a [routerLink]="['/transaction', toTransactionRouteParam(transfer.hash)]" class="tx-hash">{{ formatTransactionHash(transfer.hash) }}</a>
               </span>
               <span role="cell" class="address">{{ formatAddress(transfer.from) }}</span>
               <span role="cell" class="address">{{ formatAddress(transfer.to) }}</span>
@@ -574,6 +575,14 @@ export class TokenDetailPageComponent implements OnInit {
   formatAddress(address: string): string {
     if (!address) return '';
     return address.length > 16 ? `${address.slice(0, 10)}…${address.slice(-4)}` : address;
+  }
+
+  formatTransactionHash(hash: string): string {
+    return this.formatAddress(formatTransactionIdForDisplay(hash));
+  }
+
+  toTransactionRouteParam(hash: string): string {
+    return toExplorerTransactionRouteParam(hash);
   }
 
   formatSupply(value: number, decimals: number): string {
