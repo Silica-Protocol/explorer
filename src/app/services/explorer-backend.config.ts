@@ -1,13 +1,16 @@
 import { InjectionToken, Provider } from '@angular/core';
 
-export type ExplorerBackendMode = 'mock' | 'node';
+export type ExplorerBackendMode = 'mock' | 'node' | 'api';
 
 export interface ExplorerBackendConfig {
   /** Which backend the explorer uses as its data source. */
   readonly mode: ExplorerBackendMode;
 
-  /** Base URL for a Silica node API server (e.g. http://localhost:8545). */
+  /** Base URL for a Silica node RPC surface (e.g. http://localhost:8545). */
   readonly nodeBaseUrl: string;
+
+  /** Optional base URL for the cached/indexed API layer when mode is `api`. */
+  readonly apiBaseUrl?: string;
 }
 
 export const EXPLORER_BACKEND_CONFIG = new InjectionToken<ExplorerBackendConfig>('EXPLORER_BACKEND_CONFIG');
@@ -28,10 +31,12 @@ function readRuntimeConfig(): ExplorerRuntimeConfig {
   const obj = candidate as Record<string, unknown>;
   const mode = obj['mode'];
   const nodeBaseUrl = obj['nodeBaseUrl'];
+  const apiBaseUrl = obj['apiBaseUrl'];
 
   return {
-    mode: mode === 'node' || mode === 'mock' ? mode : undefined,
-    nodeBaseUrl: typeof nodeBaseUrl === 'string' ? nodeBaseUrl : undefined
+    mode: mode === 'node' || mode === 'mock' || mode === 'api' ? mode : undefined,
+    nodeBaseUrl: typeof nodeBaseUrl === 'string' ? nodeBaseUrl : undefined,
+    apiBaseUrl: typeof apiBaseUrl === 'string' ? apiBaseUrl : undefined
   };
 }
 

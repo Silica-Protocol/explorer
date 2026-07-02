@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ExplorerDataService, AlertInfo, AlertEvent, AlertSeverity } from '@app/services/explorer-data.service';
+import { ExplorerDataService } from '@app/services/explorer-data.service';
+import type { AlertInfo, AlertEvent } from '@shared/models/alert.model';
 
 @Component({
   selector: 'alerts-page',
@@ -454,8 +455,8 @@ export class AlertsPageComponent implements OnInit {
 
     try {
       const response = await this.data.fetchAlerts();
-      this.activeAlerts = response.active_alerts || [];
-      this.alertHistory = (response.alert_history || []).sort((a, b) => b.timestamp - a.timestamp);
+      this.activeAlerts = [...(response.active_alerts || [])];
+      this.alertHistory = [...(response.alert_history || [])].sort((a: AlertEvent, b: AlertEvent) => b.timestamp - a.timestamp);
     } catch (err) {
       this.error = 'Failed to load alerts';
       console.error('Alerts load error:', err);

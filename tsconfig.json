@@ -29,7 +29,11 @@
       "@blocks/*": ["app/blocks/*"],
       "@transactions/*": ["app/transactions/*"],
       "@accounts/*": ["app/accounts/*"],
-      "@search/*": ["app/search/*"]
+      "@search/*": ["app/search/*"],
+      "@silica-protocol/explorer-models": ["../../protocol-core/ts-models/src/index.ts"],
+      "@silica-protocol/explorer-models/*": ["../../protocol-core/ts-models/src/*"],
+      "@silica-protocol/node-models": ["../../protocol-core/node-models/src/index.ts"],
+      "@silica-protocol/node-models/*": ["../../protocol-core/node-models/src/*"]
     }
   },
   "angularCompilerOptions": {

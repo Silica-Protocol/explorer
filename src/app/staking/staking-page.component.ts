@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { take } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 
 interface StakingMetrics {
@@ -433,27 +433,20 @@ export class StakingPageComponent implements OnInit {
     this.error = null;
 
     try {
-      console.log('Loading staking data...');
-      
       const stakingInfo = await this.data.fetchStakingInfo().catch(err => {
         console.warn('fetchStakingInfo failed:', err);
         return null;
       });
-      console.log('stakingInfo:', stakingInfo);
 
       const delegations = await this.data.fetchStakingDelegations(10).catch(err => {
         console.warn('fetchStakingDelegations failed:', err);
         return [];
       });
-      console.log('delegations:', delegations);
 
-      const networkStats = await this.data.networkStats$.pipe(
-        take(1)
-      ).toPromise().catch(err => {
+      const networkStats = await firstValueFrom(this.data.networkStats$).catch(err => {
         console.warn('networkStats failed:', err);
         return null;
       });
-      console.log('networkStats:', networkStats);
 
       if (stakingInfo) {
         this.metrics = {
@@ -479,14 +472,11 @@ export class StakingPageComponent implements OnInit {
         this.metrics.totalValidators = networkStats.activeValidators;
       }
 
-      console.log('Staking data loaded, metrics:', this.metrics);
-
     } catch (err) {
       this.error = 'Failed to load staking data';
       console.error('Staking data load error:', err);
     } finally {
       this.loading = false;
-      console.log('Loading set to false');
     }
   }
 

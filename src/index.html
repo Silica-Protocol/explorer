@@ -17,12 +17,19 @@
 
     <!--
       Optional runtime configuration.
-      Set these from your hosting layer (or edit this file for a static deploy) to connect to a node.
+      Set these from your hosting layer (or edit this file for a static deploy) to connect to a node
+      or to the cached/indexed API layer.
 
       Example:
         window.__CHERT_EXPLORER__ = {
           mode: 'node',
           nodeBaseUrl: 'https://testnet.silicaprotocol.network'
+        };
+
+      API example:
+        window.__CHERT_EXPLORER__ = {
+          mode: 'api',
+          apiBaseUrl: 'https://api.testnet.silicaprotocol.network'
         };
     -->
     <script>

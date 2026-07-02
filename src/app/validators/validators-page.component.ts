@@ -1,11 +1,13 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { combineLatest, Observable, Subject, interval } from 'rxjs';
-import { map, takeUntil, switchMap } from 'rxjs/operators';
-import { ExplorerDataService, ExtendedNetworkStatistics, HealthData } from '@app/services/explorer-data.service';
+import { combineLatest, from, Observable, of, Subject, timer } from 'rxjs';
+import { catchError, map, startWith, switchMap, takeUntil } from 'rxjs/operators';
+import { ExplorerDataService } from '@app/services/explorer-data.service';
+import type { ExtendedNetworkStatistics, HealthData } from '@shared/models/network.model';
 import type { PositiveInteger, UnixMs, Hash, CommitteeId } from '@silica-protocol/explorer-models';
 import type { BlockSummary, AccountAddress } from '@silica-protocol/explorer-models';
+import type { NetworkInfoResponse, NetworkPeerInfo, NetworkValidatorInfo } from '@silica-protocol/node-models';
 import { assert } from '@shared/util/assert';
 
 interface ValidatorInfo {
@@ -24,7 +26,7 @@ interface NodeInfo {
   isConnected: boolean;
   heartbeatAgeMs: number | null;
   commitIndex: number | null;
-  committeeRegistered: boolean | null;
+  committeeRegistered: number | null;
   committeeTotal: number | null;
   blocker: string | null;
   height: number;
@@ -1118,16 +1120,26 @@ const MAX_VALIDATORS = 128;
 })
 export class ValidatorsPageComponent implements OnInit, OnDestroy {
   private nodes: NodeInfo[] = [];
-  private networkInfoData: any = null;
+  private networkInfoData: NetworkInfoResponse | null = null;
   private destroy$ = new Subject<void>();
 
-  private readonly nodes$ = interval(10000).pipe(
+  private readonly nodes$ = timer(0, 10000).pipe(
     takeUntil(this.destroy$),
-    switchMap(() => this.data.fetchNetworkInfo()),
+    switchMap(() => from(this.data.fetchNetworkInfo()).pipe(
+      catchError((error) => {
+        console.warn('Failed to fetch network info for validators page', error);
+        return of<NetworkInfoResponse | null>(null);
+      })
+    )),
     map(networkInfo => {
+      if (networkInfo === null) {
+        this.networkInfoData = null;
+        return [] as NodeInfo[];
+      }
       this.networkInfoData = networkInfo;
       return this.mapPeerNodes(networkInfo.peers);
-    })
+    }),
+    startWith([] as NodeInfo[])
   );
 
   readonly viewModel$: Observable<ValidatorsViewModel> = combineLatest([
@@ -1236,16 +1248,7 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
     return peer.peerId;
   }
 
-  private mapPeerNodes(peers: ReadonlyArray<{
-    peer_id: string | null;
-    is_connected: boolean;
-    status: string;
-    heartbeat_age_ms: number | null;
-    commit_index: number | null;
-    committee_registered: boolean | null;
-    committee_total: number | null;
-    blocker: string | null;
-  }>): NodeInfo[] {
+  private mapPeerNodes(peers: ReadonlyArray<NetworkPeerInfo>): NodeInfo[] {
     const mapped = new Map<string, NodeInfo>();
 
     for (const peer of peers) {
@@ -1306,10 +1309,11 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
 
     // Use validators from networkInfo (staking) if available, otherwise fall back to block extraction
     let validators: ValidatorInfo[];
+    const networkInfoData = this.networkInfoData;
     
-    if (this.networkInfoData?.validators?.length > 0) {
+    if (networkInfoData !== null && networkInfoData.validators.length > 0) {
       // Use validators from staking via get_network_info
-      validators = this.networkInfoData.validators.map((v: any, index: number) => ({
+      validators = networkInfoData.validators.map((v: NetworkValidatorInfo, index: number) => ({
         id: `validator-${index}`,
         address: v.address as AccountAddress,
         lastBlockTime: null, // Not available in staking data
@@ -1360,16 +1364,17 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
     // Calculate average block time
     let avgBlockTime = 0;
     if (blocks.length >= 2) {
-      const sortedBlocks = [...blocks].sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
-      const totalTime = (sortedBlocks[sortedBlocks.length - 1].timestamp as number) - (sortedBlocks[0].timestamp as number);
-      avgBlockTime = totalTime / (sortedBlocks.length - 1) / 1000;
+      const newestTimestamp = blocks[0].timestamp as number;
+      const oldestTimestamp = blocks[blocks.length - 1].timestamp as number;
+      const totalTime = newestTimestamp - oldestTimestamp;
+      avgBlockTime = totalTime / (blocks.length - 1) / 1000;
     }
 
     // Calculate participation (active validators / total known validators)
     const activeCount = validators.filter(v => v.isActive).length;
     const participation = validators.length > 0 ? (activeCount / Math.max(stats.activeValidators, validators.length)) * 100 : 0;
 
-    const fallbackNodes: NodeInfo[] = (health?.network.connectedPeers ?? []).map((peerId) => ({
+    const fallbackNodes: NodeInfo[] = (health?.network.connectedPeers ?? []).map((peerId: string) => ({
       nodeId: peerId,
       address: peerId,
       status: 'online' as const,
@@ -1385,7 +1390,8 @@ export class ValidatorsPageComponent implements OnInit, OnDestroy {
       uptimeSeconds: 0
     }));
 
-    const nodes = this.nodes.length > 0 ? this.nodes : fallbackNodes;
+    const hasOnlySyntheticApiNode = this.nodes.length === 1 && this.nodes[0].nodeId === 'silica-api';
+    const nodes = this.nodes.length > 0 && !hasOnlySyntheticApiNode ? this.nodes : fallbackNodes;
 
     // Determine network health using canonical health endpoint first.
     let networkHealth: 'healthy' | 'degraded' | 'unhealthy' = 'unhealthy';

@@ -463,7 +463,8 @@ export class ExplorerHeaderComponent {
     {
       label: 'Core',
       items: [
-        { label: 'Blocks', route: '/' },
+        { label: 'Overview', route: '/' },
+        { label: 'Blocks', route: '/blocks' },
         { label: 'Transactions', route: '/transactions' },
         { label: 'Accounts', route: '/accounts' },
         { label: 'Staking', route: '/staking' },

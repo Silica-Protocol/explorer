@@ -376,45 +376,7 @@ export class AccountDetailComponent implements OnDestroy {
         this.data.fetchTransactionHistory(address, 50, null)
       ]);
 
-      this.snapshot = {
-        account: {
-          address: balanceInfo.address as unknown as AccountActivitySnapshot['account']['address'],
-          balance: this.data['toAttoValue'](parseInt(balanceInfo.balance, 10)),
-          stakedBalance: this.data['toAttoValue'](0) as unknown as AttoValue,
-          nonce: balanceInfo.nonce as unknown as AccountActivitySnapshot['account']['nonce'],
-          lastSeen: Date.now() as unknown as AccountActivitySnapshot['account']['lastSeen'],
-          reputation: 0
-        },
-        outbound: (txHistory.transactions ?? [])
-          .filter(tx => tx.direction === 'outgoing')
-          .slice(0, 32)
-          .map(tx => ({
-            hash: tx.tx_id as unknown as TransactionSummary['hash'],
-            blockHash: tx.block_hash as unknown as TransactionSummary['blockHash'],
-            blockHeight: this.data['toPositiveInteger'](tx.block_number) as unknown as TransactionSummary['blockHeight'],
-            from: tx.sender as unknown as TransactionSummary['from'],
-            to: tx.recipient as unknown as TransactionSummary['to'],
-            value: this.data['toAttoValue'](tx.amount) as unknown as TransactionSummary['value'],
-            fee: this.data['toAttoValue'](tx.fee) as unknown as TransactionSummary['fee'],
-            timestamp: tx.timestamp as unknown as TransactionSummary['timestamp'],
-            status: tx.status as unknown as TransactionSummary['status']
-          })),
-        inbound: (txHistory.transactions ?? [])
-          .filter(tx => tx.direction === 'incoming')
-          .slice(0, 32)
-          .map(tx => ({
-            hash: tx.tx_id as unknown as TransactionSummary['hash'],
-            blockHash: tx.block_hash as unknown as TransactionSummary['blockHash'],
-            blockHeight: this.data['toPositiveInteger'](tx.block_number) as unknown as TransactionSummary['blockHeight'],
-            from: tx.sender as unknown as TransactionSummary['from'],
-            to: tx.recipient as unknown as TransactionSummary['to'],
-            value: this.data['toAttoValue'](tx.amount) as unknown as TransactionSummary['value'],
-            fee: this.data['toAttoValue'](tx.fee) as unknown as TransactionSummary['fee'],
-            timestamp: tx.timestamp as unknown as TransactionSummary['timestamp'],
-            status: tx.status as unknown as TransactionSummary['status']
-          })),
-        recentBlocks: []
-      };
+      this.snapshot = this.data.createAccountSnapshotFromNode(balanceInfo, txHistory);
     } catch (e) {
       console.error('Error loading account:', e);
     }

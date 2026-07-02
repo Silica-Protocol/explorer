@@ -16,8 +16,42 @@ import type {
   TransactionHistoryResult as NodeTransactionHistoryResult,
   TransactionHistoryEntry as NodeTransactionHistoryEntry,
   Transaction as NodeTransaction,
-  JsonRpcRequest,
-  JsonRpcResponse
+   JsonRpcRequest,
+   JsonRpcResponse,
+   BalanceResult,
+   StakingInfo,
+   StakingDelegation,
+   PrivacyInfo,
+   PrivacyOperation,
+   GovernanceInfo,
+   GovernanceProposal,
+   TreasuryInfo,
+   TokenInfo,
+   TokenDetails,
+   TokenHolder,
+   TokenTransfer,
+   ContractCodeResult,
+   ContractAbiResult,
+   EventsQuery,
+   EventLog,
+  AnalyticsResponse,
+  BlockAnalyticsQuery,
+  BlockAnalyticsResponse,
+  WireAnalyticsResponse,
+  ChainParameters,
+  NodeStatusInfo,
+  GetNodesResult,
+  NetworkValidatorInfo,
+  NetworkInfoResponse,
+  WireNetworkInfoResponse,
+  NetworkPeerInfo,
+   BridgeHistoryEntry,
+   BridgeStats,
+   AlertsResponse,
+   AlertInfo,
+   AlertEvent,
+   AlertSeverity,
+   HealthResponse
 } from '@silica-protocol/node-models';
 import type {
   AccountActivitySnapshot,
@@ -26,101 +60,18 @@ import type {
   BlockDetails,
   BlockSummary,
   Hash,
-  NetworkStatistics,
   TransactionDetails,
   TransactionSummary,
   AttoValue,
   PositiveInteger,
   UnixMs,
-  CommitteeId
+   CommitteeId,
+   ExtendedNetworkStatistics,
+  HealthData
 } from '@silica-protocol/explorer-models';
 
-export interface ExtendedNetworkStatistics extends NetworkStatistics {
-  readonly dagTipCommitIndex: number;
-  readonly finalizedCommitIndex: number;
-  readonly dagFinalityGap: number;
-  readonly txQueueSize: number;
-  readonly pendingFinalityCerts: number;
-  readonly isSynced: boolean;
-  readonly epoch: number;
-  readonly epochDurationMs: number;
-  readonly epochElapsedMs: number;
-  readonly timeToNextEpochMs: number;
-}
-
-export interface HealthData {
-  readonly status: string;
-  readonly version: string;
-  readonly uptimeSeconds: number;
-  readonly nodeType: string;
-  readonly timestampSeconds: number;
-  readonly consensus: {
-    readonly isSynced: boolean;
-    readonly currentHeight: number;
-    readonly dagTipCommitIndex: number;
-    readonly finalizedCommitIndex: number;
-    readonly dagFinalityGap: number;
-    readonly txQueueSize: number;
-    readonly pendingFinalityCerts: number;
-    readonly tephraGossipSyncRounds: number;
-    readonly tephraEventsIngested: number;
-    readonly tephraEventsSent: number;
-    readonly tephraEventStoreSize: number;
-    readonly validatorCount: number;
-    readonly committeeSize: number;
-    readonly epoch: number;
-    readonly epochDurationMs: number;
-    readonly epochElapsedMs: number;
-    readonly timeToNextEpochMs: number;
-    readonly startupGateActive: boolean;
-    readonly startupReadyPeers: number;
-    readonly startupExpectedReadyPeers: number;
-    readonly startupVrfReadyPeers: number;
-    readonly startupExpectedVrfReadyPeers: number;
-    readonly startupWaitMs: number;
-    readonly startupPeerReadiness: readonly {
-      readonly peerId: string;
-      readonly status: string;
-      readonly heartbeatAgeMs: number;
-      readonly commitIndex: number;
-      readonly blocker: string | null;
-    }[];
-  };
-  readonly network: {
-    readonly peerCount: number;
-    readonly connectedPeerCount: number;
-    readonly totalPeers: number;
-    readonly connectedPeers: readonly string[];
-    readonly bootstrapPeers: number;
-    readonly messageSuccessRate: number;
-    readonly averageLatencyMs: number;
-    readonly connectionQuality: number;
-  };
-}
-
-export type AlertSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
-
-export interface AlertInfo {
-  readonly code: string;
-  readonly severity: string;
-  readonly message: string;
-  readonly timestamp: number;
-  readonly details?: Record<string, unknown>;
-}
-
-export interface AlertEvent {
-  readonly id: string;
-  readonly alert_type: string;
-  readonly severity: AlertSeverity;
-  readonly message: string;
-  readonly timestamp: number;
-  readonly resolved_at: number | null;
-}
-
-export interface AlertsResponse {
-  readonly active_alerts: AlertInfo[];
-  readonly alert_history: AlertEvent[];
-}
+export type { ExtendedNetworkStatistics, HealthData } from '@silica-protocol/explorer-models';
+export type { AlertInfo, AlertEvent, AlertSeverity, AlertsResponse } from '@silica-protocol/node-models';
 
 interface MutableAccountState {
   readonly address: AccountAddress;
@@ -172,6 +123,7 @@ export class ExplorerDataService implements OnDestroy {
 
   private nodePollInFlight = false;
   private nodeLatestHeight = 0;
+  private nodeFinalizedHeight = 0;
   private nodeBlocksCursor: number | undefined = undefined;
   private nodeBlocksLoadingMore = false;
 
@@ -247,7 +199,7 @@ export class ExplorerDataService implements OnDestroy {
 
   /** Manual refresh action for the UI. */
   refreshNow(): void {
-    if (this.backend.mode === 'node') {
+    if (this.isLiveBackend()) {
       void this.refreshFromNode();
       return;
     }
@@ -289,33 +241,13 @@ export class ExplorerDataService implements OnDestroy {
     }
 
     try {
-      console.log('Fetching tx:', trimmed);
-      
       const txResult = await this.fetchTransactionByHash(trimmed);
-      console.log('Got tx result:', txResult);
-      
       if (txResult && txResult.status !== 'not_found') {
-        const extended = txResult as unknown as Record<string, unknown>;
-        return {
-          hash: txResult.tx_id as Hash,
-          blockHash: (extended['block_hash'] as Hash) || ('' as Hash),
-          blockHeight: this.toPositiveInteger((extended['block_number'] as number) || 0),
-          from: txResult.sender as unknown as AccountAddress,
-          to: txResult.recipient as unknown as AccountAddress,
-          value: this.toAttoValue(txResult.amount ?? 0),
-          fee: this.toAttoValue(txResult.fee ?? 0),
-          timestamp: txResult.timestamp as unknown as UnixMs,
-          status: txResult.status as unknown as import('@silica-protocol/explorer-models').TransactionStatus,
-          inputs: [],
-          outputs: [],
-          confirmations: 0
-        };
+        return this.nodeTransactionResultToDetails(txResult);
       }
 
-      console.log('Tx not found');
       return null;
-    } catch (e) {
-      console.error('Error fetching tx:', e);
+    } catch {
       return null;
     }
   }
@@ -367,22 +299,7 @@ export class ExplorerDataService implements OnDestroy {
     try {
       const result = await this.fetchTransactionByHash(trimmed);
       if (result && result.status !== 'not_found') {
-        const extended = result as unknown as Record<string, unknown>;
-        const tx: TransactionDetails = {
-          hash: result.tx_id as Hash,
-          blockHash: (extended['block_hash'] as Hash) || ('' as Hash),
-          blockHeight: this.toPositiveInteger((extended['block_number'] as number) || 0),
-          from: result.sender as unknown as AccountAddress,
-          to: result.recipient as unknown as AccountAddress,
-          value: this.toAttoValue(result.amount ?? 0),
-          fee: this.toAttoValue(result.fee ?? 0),
-          timestamp: result.timestamp as unknown as UnixMs,
-          status: result.status as unknown as import('@silica-protocol/explorer-models').TransactionStatus,
-          inputs: [],
-          outputs: [],
-          confirmations: 0
-        };
-        return [tx];
+        return [this.nodeTransactionResultToDetails(result)];
       }
       return [];
     } catch {
@@ -408,8 +325,7 @@ export class ExplorerDataService implements OnDestroy {
         return details;
       }
       return null;
-    } catch (e) {
-      console.error('Error fetching block:', e);
+    } catch {
       return null;
     }
   }
@@ -427,8 +343,7 @@ export class ExplorerDataService implements OnDestroy {
         return details;
       }
       return null;
-    } catch (e) {
-      console.error('Error fetching block:', e);
+    } catch {
       return null;
     }
   }
@@ -460,12 +375,12 @@ export class ExplorerDataService implements OnDestroy {
     return {
       hash: tx.tx_id as Hash,
       blockHash: tx.block_hash as Hash,
-      blockHeight: this.toPositiveInteger(tx.block_number),
+      blockHeight: this.toPositiveInteger(tx.block_number ?? 0),
       from: tx.sender as unknown as import('@silica-protocol/explorer-models').AccountAddress,
       to: tx.recipient as unknown as import('@silica-protocol/explorer-models').AccountAddress,
-      value: this.toAttoValue(tx.amount),
-      fee: this.toAttoValue(tx.fee),
-      timestamp: tx.timestamp as unknown as import('@silica-protocol/explorer-models').UnixMs,
+      value: this.toAttoValue(tx.amount ?? 0),
+      fee: this.toAttoValue(tx.fee ?? 0),
+      timestamp: this.parseNodeTimestamp(tx.timestamp) as import('@silica-protocol/explorer-models').UnixMs,
       status: tx.status as unknown as import('@silica-protocol/explorer-models').TransactionStatus,
       inputs: [],
       outputs: [],
@@ -473,10 +388,10 @@ export class ExplorerDataService implements OnDestroy {
     };
   }
 
-  async fetchBalance(address: string): Promise<{ address: string; balance: string; nonce: number }> {
+  async fetchBalance(address: string): Promise<BalanceResult> {
     const trimmed = address.trim();
     assert(trimmed.length > 0, 'Address must not be empty');
-    const result = await this.jsonRpcCall<{ address: string; balance: string; nonce: number }>(
+    const result = await this.jsonRpcCall<BalanceResult>(
       'get_balance',
       { address: trimmed }
     );
@@ -485,426 +400,91 @@ export class ExplorerDataService implements OnDestroy {
     return result;
   }
 
-  async fetchStakingInfo(): Promise<{
-    total_staked: string;
-    total_validators: number;
-    active_delegators: number;
-    avg_apy: number;
-    total_rewards: string;
-  }> {
-    return await this.jsonRpcCall<{
-      total_staked: string;
-      total_validators: number;
-      active_delegators: number;
-      avg_apy: number;
-      total_rewards: string;
-    }>('get_staking_info', {});
+  async fetchStakingInfo(): Promise<StakingInfo> {
+    return await this.jsonRpcCall<StakingInfo>('get_staking_info', {});
   }
 
-  async fetchStakingDelegations(limit: number = 50): Promise<Array<{
-    validator_address: string;
-    delegator_address: string;
-    amount: string;
-    rewards: string;
-    last_claimed: string;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      validator_address: string;
-      delegator_address: string;
-      amount: string;
-      rewards: string;
-      last_claimed: string;
-    }>>('get_staking_delegations', { limit });
+  async fetchStakingDelegations(limit: number = 50): Promise<readonly StakingDelegation[]> {
+    return await this.jsonRpcCall<readonly StakingDelegation[]>('get_staking_delegations', { limit });
   }
 
-  async fetchPrivacyInfo(): Promise<{
-    total_shielded: string;
-    total_unshielded: string;
-    active_shielded_accounts: number;
-    pending_operations: number;
-    homomorphic_accounts: number;
-    homomorphic_transfers: number;
-    stealth_transfers: number;
-    scanned_blocks: number;
-    latest_block: number;
-  }> {
-    return await this.jsonRpcCall<{
-      total_shielded: string;
-      total_unshielded: string;
-      active_shielded_accounts: number;
-      pending_operations: number;
-      homomorphic_accounts: number;
-      homomorphic_transfers: number;
-      stealth_transfers: number;
-      scanned_blocks: number;
-      latest_block: number;
-    }>('get_privacy_info', {});
+  async fetchPrivacyInfo(): Promise<PrivacyInfo> {
+    return await this.jsonRpcCall<PrivacyInfo>('get_privacy_info', {});
   }
 
-  async fetchPrivacyOperations(limit: number = 50): Promise<Array<{
-    id: string;
-    type: 'shield' | 'unshield' | 'transfer';
-    privacy_mode: 'bridge_shield' | 'bridge_unshield' | 'stealth' | 'homomorphic' | 'encrypted_stealth';
-    sender: string;
-    recipient: string;
-    amount: string | null;
-    amount_visible: boolean;
-    status: 'pending' | 'completed' | 'failed';
-    ledger_status: 'pending' | 'included' | 'finalized';
-    timestamp: string;
-    tx_hash: string;
-    block_number: number | null;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      id: string;
-      type: 'shield' | 'unshield' | 'transfer';
-      privacy_mode: 'bridge_shield' | 'bridge_unshield' | 'stealth' | 'homomorphic' | 'encrypted_stealth';
-      sender: string;
-      recipient: string;
-      amount: string | null;
-      amount_visible: boolean;
-      status: 'pending' | 'completed' | 'failed';
-      ledger_status: 'pending' | 'included' | 'finalized';
-      timestamp: string;
-      tx_hash: string;
-      block_number: number | null;
-    }>>('get_privacy_operations', { limit });
+  async fetchPrivacyOperations(limit: number = 50): Promise<readonly PrivacyOperation[]> {
+    return await this.jsonRpcCall<readonly PrivacyOperation[]>('get_privacy_operations', { limit });
   }
 
-  async fetchGovernanceInfo(): Promise<{
-    active_proposals: number;
-    total_proposals: number;
-    dao_treasury: string;
-    voter_participation: number;
-  }> {
-    return await this.jsonRpcCall<{
-      active_proposals: number;
-      total_proposals: number;
-      dao_treasury: string;
-      voter_participation: number;
-    }>('get_governance_info', {});
+  async fetchGovernanceInfo(): Promise<GovernanceInfo> {
+    return await this.jsonRpcCall<GovernanceInfo>('get_governance_info', {});
   }
 
-  async fetchProposals(status?: string, limit: number = 20): Promise<Array<{
-    id: string;
-    title: string;
-    description: string;
-    status: 'active' | 'passed' | 'rejected' | 'executed';
-    votes_for: string;
-    votes_against: string;
-    quorum: number;
-    end_time: string;
-    proposer: string;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      id: string;
-      title: string;
-      description: string;
-      status: 'active' | 'passed' | 'rejected' | 'executed';
-      votes_for: string;
-      votes_against: string;
-      quorum: number;
-      end_time: string;
-      proposer: string;
-    }>>('get_proposals', { status, limit });
+  async fetchProposals(status?: string, limit: number = 20): Promise<readonly GovernanceProposal[]> {
+    return await this.jsonRpcCall<readonly GovernanceProposal[]>('get_proposals', { status, limit });
   }
 
-  async fetchTreasury(): Promise<{
-    total_balance: string;
-    last_month_in: string;
-    last_month_out: string;
-  }> {
-    return await this.jsonRpcCall<{
-      total_balance: string;
-      last_month_in: string;
-      last_month_out: string;
-    }>('get_treasury', {});
+  async fetchTreasury(): Promise<TreasuryInfo> {
+    return await this.jsonRpcCall<TreasuryInfo>('get_treasury', {});
   }
 
-  async fetchTokens(limit: number = 50): Promise<Array<{
-    address: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    total_supply: string;
-    holder_count: number;
-    transfer_count: number;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      address: string;
-      name: string;
-      symbol: string;
-      decimals: number;
-      total_supply: string;
-      holder_count: number;
-      transfer_count: number;
-    }>>('get_tokens', { limit });
+  async fetchTokens(limit: number = 50): Promise<readonly TokenInfo[]> {
+    return await this.jsonRpcCall<readonly TokenInfo[]>('get_tokens', { limit });
   }
 
-  async fetchToken(tokenAddress: string): Promise<{
-    address: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    total_supply: string;
-    holder_count: number;
-    transfer_count: number;
-    creator: string;
-    deploy_block: number;
-  }> {
-    return await this.jsonRpcCall<{
-      address: string;
-      name: string;
-      symbol: string;
-      decimals: number;
-      total_supply: string;
-      holder_count: number;
-      transfer_count: number;
-      creator: string;
-      deploy_block: number;
-    }>('get_token', { address: tokenAddress });
+  async fetchToken(tokenAddress: string): Promise<TokenDetails> {
+    return await this.jsonRpcCall<TokenDetails>('get_token', { address: tokenAddress });
   }
 
-  async fetchTokenHolders(tokenAddress: string, limit: number = 50): Promise<Array<{
-    address: string;
-    balance: string;
-    percentage: number;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      address: string;
-      balance: string;
-      percentage: number;
-    }>>('get_token_holders', { address: tokenAddress, limit });
+  async fetchTokenHolders(tokenAddress: string, limit: number = 50): Promise<readonly TokenHolder[]> {
+    return await this.jsonRpcCall<readonly TokenHolder[]>('get_token_holders', { address: tokenAddress, limit });
   }
 
-  async fetchTokenTransfers(tokenAddress: string, limit: number = 50): Promise<Array<{
-    hash: string;
-    from: string;
-    to: string;
-    value: string;
-    timestamp: string;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      hash: string;
-      from: string;
-      to: string;
-      value: string;
-      timestamp: string;
-    }>>('get_token_transfers', { address: tokenAddress, limit });
+  async fetchTokenTransfers(tokenAddress: string, limit: number = 50): Promise<readonly TokenTransfer[]> {
+    return await this.jsonRpcCall<readonly TokenTransfer[]>('get_token_transfers', { address: tokenAddress, limit });
   }
 
-  async fetchContractCode(contractAddress: string): Promise<{
-    code: string;
-    bytecode: string;
-    is_verified: boolean;
-  }> {
-    return await this.jsonRpcCall<{
-      code: string;
-      bytecode: string;
-      is_verified: boolean;
-    }>('get_contract_code', { address: contractAddress });
+  async fetchContractCode(contractAddress: string): Promise<ContractCodeResult> {
+    return await this.jsonRpcCall<ContractCodeResult>('get_contract_code', { address: contractAddress });
   }
 
-  async fetchContractAbi(contractAddress: string): Promise<{
-    abi: string;
-    is_verified: boolean;
-  }> {
-    return await this.jsonRpcCall<{
-      abi: string;
-      is_verified: boolean;
-    }>('get_contract_abi', { address: contractAddress });
+  async fetchContractAbi(contractAddress: string): Promise<ContractAbiResult> {
+    return await this.jsonRpcCall<ContractAbiResult>('get_contract_abi', { address: contractAddress });
   }
 
-  async fetchEvents(params: {
-    address?: string;
-    transactionHash?: string;
-    fromBlock?: number;
-    toBlock?: number;
-    limit?: number;
-  }): Promise<Array<{
-    address: string;
-    topics: string[];
-    data: string;
-    transactionHash: string;
-    blockNumber: number;
-    logIndex: number;
-    timestamp: string;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      address: string;
-      topics: string[];
-      data: string;
-      transactionHash: string;
-      blockNumber: number;
-      logIndex: number;
-      timestamp: string;
-    }>>('get_events', params);
+  async fetchEvents(params: EventsQuery): Promise<readonly EventLog[]> {
+    return await this.jsonRpcCall<readonly EventLog[]>('get_events', params);
   }
 
-  async fetchAnalytics(): Promise<{
-    tps_history: Array<{ timestamp: string; tps: number }>;
-    gas_usage: Array<{ timestamp: string; gas_used: number }>;
-    tx_volume: Array<{ timestamp: string; volume: number }>;
-  }> {
-    return await this.jsonRpcCall<{
-      tps_history: Array<{ timestamp: string; tps: number }>;
-      gas_usage: Array<{ timestamp: string; gas_used: number }>;
-      tx_volume: Array<{ timestamp: string; volume: number }>;
-    }>('get_analytics', {});
+  async fetchAnalytics(): Promise<AnalyticsResponse> {
+    const response = await this.jsonRpcCall<WireAnalyticsResponse>('get_analytics', {});
+    return this.normalizeAnalyticsResponse(response);
   }
 
-  async fetchChainParameters(): Promise<{
-    chain_id: number;
-    block_time_ms: number;
-    max_block_size: number;
-    max_tx_per_block: number;
-    gas_price_min: string;
-    gas_price_max: string;
-    validator_count: number;
-    committee_size: number;
-    epoch_duration_blocks: number;
-    min_stake: string;
-    reward_rate: string;
-  }> {
-    return await this.jsonRpcCall<{
-      chain_id: number;
-      block_time_ms: number;
-      max_block_size: number;
-      max_tx_per_block: number;
-      gas_price_min: string;
-      gas_price_max: string;
-      validator_count: number;
-      committee_size: number;
-      epoch_duration_blocks: number;
-      min_stake: string;
-      reward_rate: string;
-    }>('get_chain_parameters', {});
+  async fetchBlockAnalytics(query: BlockAnalyticsQuery): Promise<BlockAnalyticsResponse> {
+    return await this.jsonRpcCall<BlockAnalyticsResponse>('get_block_analytics', query);
   }
 
-  async fetchNodes(): Promise<Array<{
-    node_id: string;
-    address: string;
-    status: 'online' | 'offline' | 'syncing';
-    height: number;
-    latency_ms: number;
-    last_block_time: string;
-    version: string;
-    uptime_seconds: number;
-  }>> {
-    const response = await this.jsonRpcCall<{nodes: Array<{
-      node_id: string;
-      address: string;
-      status: 'online' | 'offline' | 'syncing';
-      height: number;
-      latency_ms: number;
-      last_block_time: string;
-      version: string;
-      uptime_seconds: number;
-    }>}>('get_nodes', {});
-    console.log('Nodes response:', response);
+  async fetchChainParameters(): Promise<ChainParameters> {
+    return await this.jsonRpcCall<ChainParameters>('get_chain_parameters', {});
+  }
+
+  async fetchNodes(): Promise<readonly NodeStatusInfo[]> {
+    const response = await this.jsonRpcCall<GetNodesResult>('get_nodes', {});
     return response.nodes;
   }
 
-  async fetchNetworkInfo(): Promise<{
-    validators: Array<{
-      address: string;
-      stake_amount: string;
-      is_active: boolean;
-      reputation_score: number;
-      commission_rate: number;
-      last_activity: string;
-    }>;
-    peers: Array<{
-      peer_id: string;
-      is_connected: boolean;
-      status: string;
-      heartbeat_age_ms: number | null;
-      commit_index: number | null;
-      committee_registered: boolean | null;
-      committee_total: number | null;
-      blocker: string | null;
-    }>;
-    network: {
-      current_height: number;
-      epoch: number;
-      is_synced: boolean;
-      connected_peer_count: number;
-      average_latency_ms: number;
-      total_validators: number;
-      active_validators: number;
-    };
-  }> {
-    const response = await this.jsonRpcCall<{
-      validators: Array<{
-        address: string;
-        stake_amount: string;
-        is_active: boolean;
-        reputation_score: number;
-        commission_rate: number;
-        last_activity: string;
-      }>;
-      peers: Array<{
-        peer_id: string;
-        is_connected: boolean;
-        status: string;
-        heartbeat_age_ms: number | null;
-        commit_index: number | null;
-        committee_registered: boolean | null;
-        committee_total: number | null;
-        blocker: string | null;
-      }>;
-      network: {
-        current_height: number;
-        epoch: number;
-        is_synced: boolean;
-        connected_peer_count: number;
-        average_latency_ms: number;
-        total_validators: number;
-        active_validators: number;
-      };
-    }>('get_network_info', {});
-    console.log('Network info response:', response);
-    return response;
+  async fetchNetworkInfo(): Promise<NetworkInfoResponse> {
+    const response = await this.jsonRpcCall<WireNetworkInfoResponse>('get_network_info', {});
+    return this.normalizeNetworkInfoResponse(response);
   }
 
-  async fetchBridgeHistory(limit: number = 50): Promise<Array<{
-    id: string;
-    type: 'deposit' | 'withdraw';
-    source_chain: string;
-    destination_chain: string;
-    sender: string;
-    recipient: string;
-    amount: string;
-    status: 'pending' | 'completed' | 'failed';
-    timestamp: string;
-    tx_hash: string;
-  }>> {
-    return await this.jsonRpcCall<Array<{
-      id: string;
-      type: 'deposit' | 'withdraw';
-      source_chain: string;
-      destination_chain: string;
-      sender: string;
-      recipient: string;
-      amount: string;
-      status: 'pending' | 'completed' | 'failed';
-      timestamp: string;
-      tx_hash: string;
-    }>>('get_bridge_history', { limit });
+  async fetchBridgeHistory(limit: number = 50): Promise<readonly BridgeHistoryEntry[]> {
+    return await this.jsonRpcCall<readonly BridgeHistoryEntry[]>('get_bridge_history', { limit });
   }
 
-  async fetchBridgeStats(): Promise<{
-    total_deposits: string;
-    total_withdraws: string;
-    active_transfers: number;
-    supported_chains: string[];
-  }> {
-    return await this.jsonRpcCall<{
-      total_deposits: string;
-      total_withdraws: string;
-      active_transfers: number;
-      supported_chains: string[];
-    }>('get_bridge_stats', {});
+  async fetchBridgeStats(): Promise<BridgeStats> {
+    return await this.jsonRpcCall<BridgeStats>('get_bridge_stats', {});
   }
 
   start(): void {
@@ -912,7 +492,7 @@ export class ExplorerDataService implements OnDestroy {
       return;
     }
 
-    if (this.backend.mode === 'node') {
+    if (this.isLiveBackend()) {
       this.running = true;
 
       // Poll immediately, then on an interval.
@@ -1079,6 +659,7 @@ export class ExplorerDataService implements OnDestroy {
   }
 
   private applyFinality(finalizedThreshold: number): void {
+    let changed = false;
     const updated = this.blocksSubject.getValue().map((block: BlockSummary) => {
       let nextStatus = block.status;
       if ((block.height as number) <= finalizedThreshold) {
@@ -1088,6 +669,7 @@ export class ExplorerDataService implements OnDestroy {
       }
 
       if (nextStatus !== block.status) {
+        changed = true;
         const details = this.blockDetails.get(block.hash);
         if (details) {
           this.blockDetails.set(block.hash, { ...details, status: nextStatus });
@@ -1098,7 +680,9 @@ export class ExplorerDataService implements OnDestroy {
       return block;
     });
 
-    this.blocksSubject.next(updated);
+    if (changed) {
+      this.blocksSubject.next(updated);
+    }
   }
 
   private maybeRotateCommittee(height: PositiveInteger, timestamp: number): void {
@@ -1364,7 +948,7 @@ export class ExplorerDataService implements OnDestroy {
     if (!state) {
       const now = Date.now();
 
-      if (this.backend.mode === 'node') {
+      if (this.isLiveBackend()) {
         state = {
           address,
           balance: 0,
@@ -1406,8 +990,15 @@ export class ExplorerDataService implements OnDestroy {
     return this._nodeOverrideUrl;
   }
 
+  private isLiveBackend(): boolean {
+    return this.backend.mode === 'node' || this.backend.mode === 'api';
+  }
+
   private nodeEndpoint(path: string): string {
-    const base = (this._nodeOverrideUrl || this.backend.nodeBaseUrl || 'https://rpc.testnet.silicaprotocol.network').trim();
+    const configuredBase = this.backend.mode === 'api'
+      ? (this.backend.apiBaseUrl || this.backend.nodeBaseUrl)
+      : this.backend.nodeBaseUrl;
+    const base = (this._nodeOverrideUrl || configuredBase || 'https://rpc.testnet.silicaprotocol.network').trim();
     assert(base.length > 0, 'nodeBaseUrl must not be empty');
     const url = new URL(base.endsWith('/') ? base : `${base}/`);
     url.pathname = `${url.pathname.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
@@ -1419,8 +1010,9 @@ export class ExplorerDataService implements OnDestroy {
       const response = await firstValueFrom(
         this.http.get<AlertsResponse>(this.nodeEndpoint('alerts'))
       );
-      this.alertsSubject.next(response);
-      return response;
+      const normalized = this.normalizeAlertsResponse(response);
+      this.alertsSubject.next(normalized);
+      return normalized;
     } catch (err) {
       console.warn('Failed to fetch alerts', err);
       return { active_alerts: [], alert_history: [] };
@@ -1580,15 +1172,15 @@ export class ExplorerDataService implements OnDestroy {
         })()
       ]);
 
-      const blocks = [...(result.blocks ?? [])].sort((a, b) => a.block_number - b.block_number);
-      const latest = blocks.at(-1)?.block_number ?? 0;
+      const blocks = [...(result.blocks ?? [])].sort((a, b) => b.block_number - a.block_number);
+      const latest = blocks[0]?.block_number ?? this.nodeLatestHeight;
       this.nodeLatestHeight = latest;
       this.nodeBlocksCursor = result.next_cursor;
 
       // If this is a refresh (not initial load), merge new blocks with existing ones
       // to preserve any previously loaded older blocks from "load more"
       const existingBlocks = this.blocksSubject.getValue();
-      const existingHeights = new Set(existingBlocks.map(b => b.height));
+      const existingHeights = new Set(existingBlocks.map((block) => block.height as number));
 
       const newBlockDetails: BlockDetails[] = [];
       const transactions: TransactionDetails[] = [];
@@ -1607,41 +1199,44 @@ export class ExplorerDataService implements OnDestroy {
           const txDetail = tx as TransactionDetails;
           this.transactionDetails.set(txDetail.hash, txDetail);
           transactions.push(txDetail);
+          this.trackLatestTransaction(txDetail as TransactionSummary);
           this.updateAccountsFromTransaction(txDetail);
         }
       }
 
-      // Combine: new blocks (prepended) + existing blocks
-      const newSummaries = newBlockDetails.map(b => this.toSummary(b));
-      const mergedBlocks = [...newSummaries, ...existingBlocks].sort((a, b) => (b.height as number) - (a.height as number));
-
-      this.setNodeBlocks(mergedBlocks);
+      const newSummaries = newBlockDetails.map((block) => this.toSummary(block));
+      if (newSummaries.length > 0) {
+        this.setNodeBlocks([...newSummaries, ...existingBlocks]);
+      }
       this.hasMoreBlocksSubject.next(this.nodeBlocksCursor !== undefined);
 
       // Update finality status for all blocks
-      const finalizedHeight = this.toPositiveInteger(Math.max(0, latest - this.config.finalityLag));
-      this.updateFinalityFromHeight(finalizedHeight);
+      const finalizedHeightNumber = Math.max(0, latest - this.config.finalityLag);
+      if (finalizedHeightNumber !== this.nodeFinalizedHeight) {
+        this.nodeFinalizedHeight = finalizedHeightNumber;
+        this.updateFinalityFromHeight(this.toPositiveInteger(finalizedHeightNumber));
+      }
 
-      // Recent transactions sorted by timestamp desc.
-      transactions.sort((a, b) => (b.timestamp as number) - (a.timestamp as number));
-      this.transactionsSubject.next(transactions.slice(0, LATEST_TRANSACTIONS_LIMIT));
-
-      this.publishAccountSnapshots();
+      if (transactions.length > 0) {
+        this.transactionsSubject.next([...this.latestTransactions]);
+        this.publishAccountSnapshots();
+      }
 
       // Network stats (UI-level approximation)
       const now = Date.now();
       let currentHeightNumber = latest;
 
+      const statsBlocks = this.blocksSubject.getValue().slice(0, AVERAGE_TPS_SAMPLE);
       let averageTps = 0;
-      if (blocks.length >= 2) {
-        const firstTs = Date.parse(blocks[0].timestamp);
-        const lastTs = Date.parse(blocks[blocks.length - 1].timestamp);
+      if (statsBlocks.length >= 2) {
+        const firstTs = statsBlocks[statsBlocks.length - 1].timestamp as number;
+        const lastTs = statsBlocks[0].timestamp as number;
         const seconds = Math.max(1, Math.floor((lastTs - firstTs) / 1000));
-        const txCount = transactions.length;
+        const txCount = statsBlocks.reduce((sum, block) => sum + block.transactionCount, 0);
         averageTps = txCount / seconds;
       }
 
-      const uniqueValidators = new Set(blocks.map((b) => b.validator_address));
+      const uniqueValidators = new Set(statsBlocks.map((block) => block.miner));
 
       let healthData: HealthData | null = null;
       let dagTipCommitIndex = 0;
@@ -1680,7 +1275,6 @@ export class ExplorerDataService implements OnDestroy {
       let timestampSeconds = 0;
 
       if (typeof health === 'object' && health !== null) {
-        console.log('Health response:', JSON.stringify(health, null, 2));
         const h = health as Record<string, unknown>;
         
         const status = typeof h['status'] === 'string' ? h['status'] : 'unknown';
@@ -1819,15 +1413,18 @@ export class ExplorerDataService implements OnDestroy {
             connectionQuality
           }
         };
-        this.healthSubject.next(healthData);
+        if (!this.areHealthDataEqual(this.healthSubject.getValue(), healthData)) {
+          this.healthSubject.next(healthData);
+        }
       }
       
       const activeValidators = this.toPositiveInteger(
         consensusValidatorCount ?? uniqueValidators.size
       );
       const currentHeight = this.toPositiveInteger(Math.max(0, currentHeightNumber));
+      const finalizedHeight = this.toPositiveInteger(this.nodeFinalizedHeight);
 
-      this.networkSubject.next({
+      const nextNetworkStats: ExtendedNetworkStatistics = {
         currentHeight,
         finalizedHeight,
         averageTps,
@@ -1844,7 +1441,11 @@ export class ExplorerDataService implements OnDestroy {
         epochDurationMs,
         epochElapsedMs,
         timeToNextEpochMs
-      });
+      };
+
+      if (!this.areNetworkStatsEqual(this.networkSubject.getValue(), nextNetworkStats)) {
+        this.networkSubject.next(nextNetworkStats);
+      }
 
       this.lastRefreshedAtSubject.next(Date.now());
     } catch (err) {
@@ -1859,7 +1460,7 @@ export class ExplorerDataService implements OnDestroy {
     if (this.nodeBlocksLoadingMore || this.nodeBlocksCursor === undefined) {
       return false;
     }
-    if (this.backend.mode !== 'node') {
+    if (!this.isLiveBackend()) {
       return false;
     }
 
@@ -1878,7 +1479,7 @@ export class ExplorerDataService implements OnDestroy {
         return false;
       }
 
-      const blocks = [...result.blocks].sort((a, b) => a.block_number - b.block_number);
+      const blocks = [...result.blocks].sort((a, b) => b.block_number - a.block_number);
       this.nodeBlocksCursor = result.next_cursor;
 
       const blockDetails: BlockDetails[] = [];
@@ -1899,8 +1500,7 @@ export class ExplorerDataService implements OnDestroy {
 
       const summaries = blockDetails.map((b) => this.toSummary(b));
       const currentBlocks = this.blocksSubject.getValue();
-      const mergedBlocks = [...currentBlocks, ...summaries].sort((a, b) => (b.height as number) - (a.height as number));
-      this.setNodeBlocks(mergedBlocks);
+      this.setNodeBlocks([...currentBlocks, ...summaries]);
 
       if (!result.next_cursor) {
         this.nodeBlocksCursor = undefined;
@@ -2003,9 +1603,266 @@ export class ExplorerDataService implements OnDestroy {
     };
   }
 
+  createAccountSnapshotFromNode(
+    balanceInfo: BalanceResult,
+    txHistory: NodeTransactionHistoryResult
+  ): AccountActivitySnapshot {
+    return {
+      account: {
+        address: balanceInfo.address as unknown as AccountActivitySnapshot['account']['address'],
+        balance: this.toAttoValue(Number.parseInt(balanceInfo.balance, 10)),
+        stakedBalance: this.toAttoValue(0) as unknown as AttoValue,
+        nonce: this.toPositiveInteger(balanceInfo.nonce) as unknown as AccountActivitySnapshot['account']['nonce'],
+        lastSeen: this.toUnixMs(Date.now()) as unknown as AccountActivitySnapshot['account']['lastSeen'],
+        reputation: 0
+      },
+      outbound: (txHistory.transactions ?? [])
+        .filter((tx) => tx.direction === 'outgoing')
+        .slice(0, RECENT_ACCOUNT_ACTIVITY_LIMIT)
+        .map((tx) => this.nodeHistoryEntryToSummary(tx)),
+      inbound: (txHistory.transactions ?? [])
+        .filter((tx) => tx.direction === 'incoming')
+        .slice(0, RECENT_ACCOUNT_ACTIVITY_LIMIT)
+        .map((tx) => this.nodeHistoryEntryToSummary(tx)),
+      recentBlocks: []
+    };
+  }
+
   private toSummary(block: BlockDetails): BlockSummary {
     const { transactions: _ignored, ...summary } = block;
     return summary;
+  }
+
+  private nodeHistoryEntryToSummary(tx: NodeTransactionHistoryEntry): TransactionSummary {
+    return {
+      hash: tx.tx_id as TransactionSummary['hash'],
+      blockHash: tx.block_hash as TransactionSummary['blockHash'],
+      blockHeight: this.toPositiveInteger(tx.block_number ?? 0) as TransactionSummary['blockHeight'],
+      from: tx.sender as unknown as TransactionSummary['from'],
+      to: tx.recipient as unknown as TransactionSummary['to'],
+      value: this.toAttoValue(tx.amount ?? 0) as TransactionSummary['value'],
+      fee: this.toAttoValue(tx.fee ?? 0) as TransactionSummary['fee'],
+      timestamp: this.parseNodeTimestamp(tx.timestamp) as TransactionSummary['timestamp'],
+      status: this.normalizeTransactionStatus(tx.status) as TransactionSummary['status']
+    };
+  }
+
+  private nodeTransactionResultToDetails(result: NodeGetTransactionResult): TransactionDetails {
+    const raw = result as unknown as Record<string, unknown>;
+    const outputs = Array.isArray(result.outputs) ? result.outputs : [];
+    const sender = typeof result.sender === 'string' ? result.sender : '';
+    const recipient = typeof result.recipient === 'string'
+      ? result.recipient
+      : (typeof outputs[0]?.recipient === 'string' ? outputs[0].recipient : sender);
+    const timestamp = this.parseNodeTimestamp(result.timestamp);
+
+    return {
+      hash: result.tx_id as Hash,
+      blockHash: (typeof raw['block_hash'] === 'string' ? raw['block_hash'] : '') as Hash,
+      blockHeight: this.toPositiveInteger(typeof raw['block_number'] === 'number' ? raw['block_number'] : 0),
+      from: this.nodeAddressToAccountAddress((sender || recipient) as NodeAddress, 'tx.sender'),
+      to: this.nodeAddressToAccountAddress((recipient || sender) as NodeAddress, 'tx.recipient'),
+      value: this.toAttoValue(result.amount ?? result.total_amount ?? this.sumNodeOutputAmounts(outputs)),
+      fee: this.toAttoValue(result.fee ?? 0),
+      timestamp,
+      status: this.normalizeTransactionStatus(result.status),
+      inputs: [],
+      outputs: [],
+      confirmations: 0
+    };
+  }
+
+  private normalizeTransactionStatus(status: string): import('@silica-protocol/explorer-models').TransactionStatus {
+    switch (status) {
+      case 'pending':
+        return 'pending';
+      case 'rejected':
+      case 'failed':
+      case 'not_found':
+        return 'rejected';
+      default:
+        return 'confirmed';
+    }
+  }
+
+  private sumNodeOutputAmounts(outputs: readonly { amount: number }[]): number {
+    return outputs.reduce((sum, output) => sum + (Number.isFinite(output.amount) ? output.amount : 0), 0);
+  }
+
+  private normalizeAnalyticsResponse(response: WireAnalyticsResponse): AnalyticsResponse {
+    return {
+      tps_history: (response.tps_history ?? []).map((point) => ({
+        timestamp: point.timestamp,
+        tps: point.value
+      })),
+      gas_usage: (response.gas_usage ?? []).map((point) => ({
+        timestamp: point.timestamp,
+        gas_used: point.value
+      })),
+      tx_volume: (response.tx_volume ?? []).map((point) => ({
+        timestamp: point.timestamp,
+        volume: point.value
+      }))
+    };
+  }
+
+  private normalizeNetworkInfoResponse(response: WireNetworkInfoResponse): NetworkInfoResponse {
+    return {
+      validators: response.validators,
+      network: response.network,
+      peers: (response.peers ?? []).map((peer) => ({
+        peer_id: peer.peer_id ?? null,
+        is_connected: peer.is_connected,
+        status: peer.status,
+        heartbeat_age_ms: peer.heartbeat_age_ms ?? null,
+        commit_index: peer.commit_index ?? null,
+        committee_registered: peer.committee_registered ?? null,
+        committee_total: peer.committee_total ?? null,
+        blocker: peer.blocker ?? null
+      }))
+    };
+  }
+
+  private parseNodeTimestamp(timestamp?: string): UnixMs {
+    if (typeof timestamp === 'string' && timestamp.trim().length > 0) {
+      return this.toUnixMsFromRfc3339(timestamp);
+    }
+    return this.toUnixMs(0);
+  }
+
+  private normalizeAlertsResponse(response: AlertsResponse): AlertsResponse {
+    const activeAlerts = (response.active_alerts ?? []).map((alert) => ({
+      code: alert.code ?? alert.alert_type ?? 'unknown_alert',
+      alert_type: alert.alert_type ?? null,
+      severity: alert.severity,
+      message: alert.message,
+      timestamp: alert.timestamp ?? response.timestamp ?? 0,
+      resolved: alert.resolved,
+      details: alert.details
+    }));
+
+    const history = (response.alert_history ?? []).map((event) => ({
+      id: event.id,
+      alert_type: event.alert_type,
+      severity: event.severity,
+      message: event.message,
+      timestamp: event.timestamp,
+      resolved_at: event.resolved_at ?? null
+    }));
+
+    return {
+      node_id: response.node_id ?? null,
+      timestamp: response.timestamp ?? null,
+      active_alerts: activeAlerts,
+      alert_history: history,
+      alert_count: response.alert_count ?? activeAlerts.length
+    };
+  }
+
+  private areNetworkStatsEqual(
+    left: ExtendedNetworkStatistics,
+    right: ExtendedNetworkStatistics
+  ): boolean {
+    return left.currentHeight === right.currentHeight
+      && left.finalizedHeight === right.finalizedHeight
+      && left.averageTps === right.averageTps
+      && left.activeValidators === right.activeValidators
+      && left.nextElectionEtaMs === right.nextElectionEtaMs
+      && left.dagTipCommitIndex === right.dagTipCommitIndex
+      && left.finalizedCommitIndex === right.finalizedCommitIndex
+      && left.dagFinalityGap === right.dagFinalityGap
+      && left.txQueueSize === right.txQueueSize
+      && left.pendingFinalityCerts === right.pendingFinalityCerts
+      && left.isSynced === right.isSynced
+      && left.epoch === right.epoch
+      && left.epochDurationMs === right.epochDurationMs
+      && left.epochElapsedMs === right.epochElapsedMs
+      && left.timeToNextEpochMs === right.timeToNextEpochMs;
+  }
+
+  private areHealthDataEqual(left: HealthData | null, right: HealthData | null): boolean {
+    if (left === right) {
+      return true;
+    }
+    if (left === null || right === null) {
+      return false;
+    }
+
+    return left.status === right.status
+      && left.version === right.version
+      && left.nodeType === right.nodeType
+      && left.consensus.isSynced === right.consensus.isSynced
+      && left.consensus.currentHeight === right.consensus.currentHeight
+      && left.consensus.dagTipCommitIndex === right.consensus.dagTipCommitIndex
+      && left.consensus.finalizedCommitIndex === right.consensus.finalizedCommitIndex
+      && left.consensus.dagFinalityGap === right.consensus.dagFinalityGap
+      && left.consensus.txQueueSize === right.consensus.txQueueSize
+      && left.consensus.pendingFinalityCerts === right.consensus.pendingFinalityCerts
+      && left.consensus.tephraGossipSyncRounds === right.consensus.tephraGossipSyncRounds
+      && left.consensus.tephraEventsIngested === right.consensus.tephraEventsIngested
+      && left.consensus.tephraEventsSent === right.consensus.tephraEventsSent
+      && left.consensus.tephraEventStoreSize === right.consensus.tephraEventStoreSize
+      && left.consensus.validatorCount === right.consensus.validatorCount
+      && left.consensus.committeeSize === right.consensus.committeeSize
+      && left.consensus.epoch === right.consensus.epoch
+      && left.consensus.epochDurationMs === right.consensus.epochDurationMs
+      && left.consensus.epochElapsedMs === right.consensus.epochElapsedMs
+      && left.consensus.timeToNextEpochMs === right.consensus.timeToNextEpochMs
+      && left.consensus.startupGateActive === right.consensus.startupGateActive
+      && left.consensus.startupReadyPeers === right.consensus.startupReadyPeers
+      && left.consensus.startupExpectedReadyPeers === right.consensus.startupExpectedReadyPeers
+      && left.consensus.startupVrfReadyPeers === right.consensus.startupVrfReadyPeers
+      && left.consensus.startupExpectedVrfReadyPeers === right.consensus.startupExpectedVrfReadyPeers
+      && left.consensus.startupWaitMs === right.consensus.startupWaitMs
+      && this.areStartupPeerReadinessEqual(
+        left.consensus.startupPeerReadiness,
+        right.consensus.startupPeerReadiness
+      )
+      && left.network.peerCount === right.network.peerCount
+      && left.network.connectedPeerCount === right.network.connectedPeerCount
+      && left.network.totalPeers === right.network.totalPeers
+      && left.network.bootstrapPeers === right.network.bootstrapPeers
+      && left.network.messageSuccessRate === right.network.messageSuccessRate
+      && left.network.averageLatencyMs === right.network.averageLatencyMs
+      && left.network.connectionQuality === right.network.connectionQuality
+      && this.areStringArraysEqual(left.network.connectedPeers, right.network.connectedPeers);
+  }
+
+  private areStartupPeerReadinessEqual(
+    left: readonly HealthData['consensus']['startupPeerReadiness'][number][],
+    right: readonly HealthData['consensus']['startupPeerReadiness'][number][]
+  ): boolean {
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    for (let index = 0; index < left.length; index += 1) {
+      const lhs = left[index];
+      const rhs = right[index];
+      if (lhs.peerId !== rhs.peerId
+        || lhs.status !== rhs.status
+        || lhs.heartbeatAgeMs !== rhs.heartbeatAgeMs
+        || lhs.commitIndex !== rhs.commitIndex
+        || lhs.blocker !== rhs.blocker) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private areStringArraysEqual(left: readonly string[], right: readonly string[]): boolean {
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private emptyNetworkStats(): ExtendedNetworkStatistics {

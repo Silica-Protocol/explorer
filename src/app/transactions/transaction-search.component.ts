@@ -46,7 +46,7 @@ import type { GetTransactionResult as NodeGetTransactionResult } from '@silica-p
         <div class="result-card__grid">
           <article>
             <h3>Transaction ID</h3>
-            <p>{{ formatTransactionId(result.tx_id ?? '') }}</p>
+            <p>{{ formatTransactionId(result.tx_id) }}</p>
           </article>
           <article *ngIf="result.sender">
             <h3>From</h3>

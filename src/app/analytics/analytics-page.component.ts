@@ -529,7 +529,6 @@ export class AnalyticsPageComponent implements OnInit {
 
     try {
       const analytics = await this.data.fetchAnalytics();
-      console.log('Analytics loaded:', analytics);
 
       this.tpsData = (analytics.tps_history || []).map(p => ({
         timestamp: this.formatTimestamp(p.timestamp),
@@ -574,11 +573,14 @@ export class AnalyticsPageComponent implements OnInit {
     }
   }
 
-  private formatTimestamp(ts: string): string {
+  private formatTimestamp(ts: string | number): string {
     try {
-      return new Date(ts).toISOString().slice(0, 16);
+      const normalized = typeof ts === 'number'
+        ? new Date(ts < 1_000_000_000_000 ? ts * 1000 : ts)
+        : new Date(ts);
+      return normalized.toISOString().slice(0, 16);
     } catch {
-      return ts;
+      return String(ts);
     }
   }
 

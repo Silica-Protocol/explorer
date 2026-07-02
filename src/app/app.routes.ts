@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { OverviewPageComponent } from '@app/layout/overview-page.component';
 import { BlockDetailComponent } from '@blocks/block-detail.component';
+import { BlocksPageComponent } from '@blocks/blocks-page.component';
 import { TransactionDetailComponent } from '@transactions/transaction-detail.component';
 import { TransactionSearchComponent } from '@transactions/transaction-search.component';
 import { AccountDetailComponent } from '@accounts/account-detail.component';
@@ -21,6 +22,10 @@ export const APP_ROUTES: Routes = [
   {
     path: '',
     component: OverviewPageComponent
+  },
+  {
+    path: 'blocks',
+    component: BlocksPageComponent
   },
   {
     path: 'network',

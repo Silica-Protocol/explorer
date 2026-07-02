@@ -4,10 +4,11 @@ import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ExplorerDataService } from '@app/services/explorer-data.service';
 import { formatTransactionIdForDisplay, parseTransactionIdInput, toTransactionRouteParam as toExplorerTransactionRouteParam } from '@shared/util/transaction-id';
+import type { EventsQuery } from '@silica-protocol/node-models';
 
 interface EventLog {
   address: string;
-  topics: string[];
+  topics: readonly string[];
   data: string;
   transactionHash: string;
   blockNumber: number;
@@ -400,16 +401,11 @@ export class EventsPageComponent implements OnInit {
     this.error = null;
 
     try {
-      const params: any = {
-        limit: this.limit
+      const params: EventsQuery = {
+        limit: this.limit,
+        ...(this.addressFilter ? { address: this.addressFilter } : {}),
+        ...(this.txFilter ? { transactionHash: parseTransactionIdInput(this.txFilter) } : {})
       };
-
-      if (this.addressFilter) {
-        params.address = this.addressFilter;
-      }
-      if (this.txFilter) {
-        params.transactionHash = parseTransactionIdInput(this.txFilter);
-      }
 
       const events = await this.data.fetchEvents(params).catch(() => []);
 

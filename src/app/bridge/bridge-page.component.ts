@@ -20,7 +20,7 @@ interface BridgeStats {
   totalDeposits: number;
   totalWithdraws: number;
   activeTransfers: number;
-  supportedChains: string[];
+  supportedChains: readonly string[];
 }
 
 interface PrivacyMetrics {
